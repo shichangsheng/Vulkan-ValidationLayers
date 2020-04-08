@@ -80,7 +80,7 @@ IMAGE_STATE::IMAGE_STATE(VkDevice dev, VkImage img, const VkImageCreateInfo *pCr
       create_from_swapchain(VK_NULL_HANDLE),
       bind_swapchain(VK_NULL_HANDLE),
       bind_swapchain_imageIndex(0),
-      subresource_encoder(full_range),
+      subresource_encoder(*this),
       fragment_encoder(dev, *this),
       store_device_as_workaround(dev),  // TODO REMOVE WHEN encoder can be const
       sparse_requirements{} {

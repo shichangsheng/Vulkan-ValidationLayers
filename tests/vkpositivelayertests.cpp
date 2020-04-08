@@ -1007,6 +1007,8 @@ TEST_F(VkPositiveLayerTest, MultiplaneGetImageSubresourceLayout) {
     m_errorMonitor->ExpectSuccess();
     vk::GetImageSubresourceLayout(device(), image, &subres, &layout);
     m_errorMonitor->VerifyNotFound();
+    std::cout << "TEST layout: " << layout.arrayPitch << "  " << layout.depthPitch << "  " << layout.offset << "  "
+              << layout.rowPitch << "  " << layout.size << std::endl;
 
     vk::DestroyImage(device(), image, NULL);
 }

@@ -50,7 +50,7 @@ using split_op_keep_upper = sparse_container::split_op_keep_upper;
 // Interface for aspect specific traits objects (now isolated in the cpp file)
 class AspectParameters {
   public:
-    static const AspectParameters* Get(VkImageAspectFlags);
+    static const AspectParameters* Get(const IMAGE_STATE&);
     typedef uint32_t (*MaskIndexFunc)(VkImageAspectFlags);
     virtual VkImageAspectFlags AspectMask() const = 0;
     virtual MaskIndexFunc MaskToIndexFunction() const = 0;
@@ -93,10 +93,9 @@ class RangeEncoder {
           lower_bound_with_start_function_(nullptr),
           aspect_base_{0, 0, 0} {}
 
-    RangeEncoder(const VkImageSubresourceRange& full_range, const AspectParameters* param);
+    RangeEncoder(const IMAGE_STATE& image, const AspectParameters* param);
     // Create the encoder suitable to the full range (aspect mask *must* be canonical)
-    RangeEncoder(const VkImageSubresourceRange& full_range)
-        : RangeEncoder(full_range, AspectParameters::Get(full_range.aspectMask)) {}
+    RangeEncoder(const IMAGE_STATE& image) : RangeEncoder(image, AspectParameters::Get(image)) {}
     RangeEncoder(const RangeEncoder& from) = default;
     ;
 
@@ -344,9 +343,11 @@ class ImageRangeEncoder : public RangeEncoder {
     const VkSubresourceLayout& SubresourceLayout(const VkImageSubresource& subres) const;
     inline const VkExtent3D& SubresourceExtent(int mip_level) const { return subres_extents_[mip_level]; }
     inline const uint32_t& ElementSize(int aspect_index) const { return element_sizes_[aspect_index]; }
+    inline bool IsAcutalMemory() const { return actual_memory_; }
 
   private:
     const IMAGE_STATE* image_;
+    bool actual_memory_;
     std::vector<uint32_t> element_sizes_;
     std::vector<VkExtent3D> subres_extents_;
     std::vector<VkSubresourceLayout> subres_layouts_;

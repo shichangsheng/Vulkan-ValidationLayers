@@ -580,7 +580,8 @@ VkSubresourceLayout Image::subresource_layout(const VkImageSubresource &subres) 
     size_t size = sizeof(data);
     vk::GetImageSubresourceLayout(device(), handle(), &subres, &data);
     if (size != sizeof(data)) memset(&data, 0, sizeof(data));
-
+    std::cout << "subresource_layout 111: " << data.arrayPitch << "  " << data.depthPitch << "  " << data.offset << "  "
+              << data.rowPitch << "  " << data.size << std::endl;
     return data;
 }
 
@@ -590,7 +591,8 @@ VkSubresourceLayout Image::subresource_layout(const VkImageSubresourceLayers &su
     size_t size = sizeof(data);
     vk::GetImageSubresourceLayout(device(), handle(), &subres, &data);
     if (size != sizeof(data)) memset(&data, 0, sizeof(data));
-
+    std::cout << "subresource_layout 222: " << data.arrayPitch << "  " << data.depthPitch << "  " << data.offset << "  "
+              << data.rowPitch << "  " << data.size << std::endl;
     return data;
 }
 

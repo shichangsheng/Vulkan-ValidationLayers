@@ -9154,12 +9154,19 @@ TEST_F(VkLayerTest, SyncCopyOptimalImageHazards) {
     image_a.SetLayout(m_commandBuffer, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
     auto cb = m_commandBuffer->handle();
+    std::cout << "test error ssss" << std::endl;
 
+    m_errorMonitor->ExpectSuccess();
     vk::CmdCopyImage(cb, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, image_b.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &full_region);
+    m_errorMonitor->VerifyNotFound();
 
+    std::cout << "test error 000" << std::endl;
+    //m_errorMonitor->ExpectSuccess();
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE_AFTER_READ");
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &full_region);
     m_errorMonitor->VerifyFound();
+    //m_errorMonitor->VerifyNotFound();
+    std::cout << "test error 111" << std::endl;
 
     // Use the barrier to clean up the WAW, and try again. (and show that validation is accounting for the barrier effect too.)
     auto image_barrier = lvl_init_struct<VkImageMemoryBarrier>();
@@ -9176,14 +9183,17 @@ TEST_F(VkLayerTest, SyncCopyOptimalImageHazards) {
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_0_to_0);
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_1_to_1);
     m_errorMonitor->VerifyNotFound();
+    std::cout << "test error 222" << std::endl;
 
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE_AFTER_WRITE");
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_0_to_1);
     m_errorMonitor->VerifyFound();
+    std::cout << "test error 333" << std::endl;
 
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE_AFTER_WRITE");
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_b.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &full_region);
     m_errorMonitor->VerifyFound();
+    std::cout << "test error 444" << std::endl;
 
     // NOTE: Since the previous command skips in validation, the state update is never done, and the validation layer thus doesn't
     //       record the write operation to b.  So we'll need to repeat it successfully to set up for the *next* test.
@@ -9197,6 +9207,7 @@ TEST_F(VkLayerTest, SyncCopyOptimalImageHazards) {
     m_errorMonitor->ExpectSuccess();
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_b.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &full_region);
     m_errorMonitor->VerifyNotFound();
+    std::cout << "test error 555" << std::endl;
 
     // Use barrier to protect last reader, but not last writer...
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-READ_AFTER_WRITE");
@@ -9206,15 +9217,18 @@ TEST_F(VkLayerTest, SyncCopyOptimalImageHazards) {
                            nullptr);
     vk::CmdCopyImage(cb, image_b.handle(), VK_IMAGE_LAYOUT_GENERAL, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &full_region);
     m_errorMonitor->VerifyFound();
+    std::cout << "test error 666" << std::endl;
 
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_0_front);
     m_errorMonitor->SetDesiredFailureMsg(VK_DEBUG_REPORT_ERROR_BIT_EXT, "SYNC-HAZARD-WRITE_AFTER_WRITE");
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_0_front);
     m_errorMonitor->VerifyFound();
+    std::cout << "test error 777" << std::endl;
 
     m_errorMonitor->ExpectSuccess();
     vk::CmdCopyImage(cb, image_c.handle(), VK_IMAGE_LAYOUT_GENERAL, image_a.handle(), VK_IMAGE_LAYOUT_GENERAL, 1, &region_0_back);
     m_errorMonitor->VerifyNotFound();
+    std::cout << "test error 888" << std::endl;
 
     m_commandBuffer->end();
 }
