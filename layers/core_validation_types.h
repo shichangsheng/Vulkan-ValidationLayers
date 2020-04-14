@@ -219,8 +219,10 @@ struct DEVICE_MEMORY_STATE : public BASE_NODE {
     uint64_t shadow_pad_size;  // Size of the guard-band data before and after actual data. It MUST be a
                                // multiple of limits.minMemoryMapAlignment
     void *p_driver_data;       // Pointer to application's actual memory
+    VkDeviceSize fake_base_address;  // To allow a unified view of allocations, useful to Synchronization Validation
 
-    DEVICE_MEMORY_STATE(void *disp_object, const VkDeviceMemory in_mem, const VkMemoryAllocateInfo *p_alloc_info)
+    DEVICE_MEMORY_STATE(void *disp_object, const VkDeviceMemory in_mem, const VkMemoryAllocateInfo *p_alloc_info,
+                        uint64_t fake_address)
         : object(disp_object),
           mem(in_mem),
           alloc_info(p_alloc_info),
@@ -233,7 +235,8 @@ struct DEVICE_MEMORY_STATE : public BASE_NODE {
           shadow_copy_base(0),
           shadow_copy(0),
           shadow_pad_size(0),
-          p_driver_data(0){};
+          p_driver_data(0),
+          fake_base_address(fake_address){};
 };
 
 // Generic memory binding struct to track objects bound to objects
@@ -388,14 +391,16 @@ class IMAGE_STATE : public BINDABLE {
     VkSwapchainKHR create_from_swapchain;
     VkSwapchainKHR bind_swapchain;
     uint32_t bind_swapchain_imageIndex;
-    image_layout_map::Encoder range_encoder;
+    const image_layout_map::Encoder subresource_encoder;            // Subresource resolution encoder
+    const subresource_adapter::ImageRangeEncoder fragment_encoder;  // Fragment resolution encoder
+    const VkDevice store_device_as_workaround;                      // TODO REMOVE WHEN encoder can be const
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
     uint64_t external_format_android;
 #endif  // VK_USE_PLATFORM_ANDROID_KHR
 
     std::vector<VkSparseImageMemoryRequirements> sparse_requirements;
-    IMAGE_STATE(VkImage img, const VkImageCreateInfo *pCreateInfo);
+    IMAGE_STATE(VkDevice dev, VkImage img, const VkImageCreateInfo *pCreateInfo);
     IMAGE_STATE(IMAGE_STATE const &rh_obj) = delete;
 
     std::unordered_set<VkImage> aliasing_images;
@@ -521,12 +526,43 @@ struct DAGNode {
     std::vector<uint32_t> next;
 };
 
+struct SubpassDependencyGraphNode {
+    uint32_t pass;
+    struct Dependency {
+        const VkSubpassDependency2 *dependency;
+        const SubpassDependencyGraphNode *node;
+        Dependency() = default;
+        Dependency(const VkSubpassDependency2 *dependency_, const SubpassDependencyGraphNode *node_)
+            : dependency(dependency_), node(node_) {}
+    };
+    std::vector<Dependency> prev;
+    std::vector<Dependency> next;
+    std::vector<uint32_t> async;  // asynchronous subpasses with a lower subpass index
+
+    const VkSubpassDependency2 *barrier_from_external;
+    const VkSubpassDependency2 *barrier_to_external;
+    std::unique_ptr<VkSubpassDependency2> implicit_barrier_from_external;
+    std::unique_ptr<VkSubpassDependency2> implicit_barrier_to_external;
+};
+
 struct RENDER_PASS_STATE : public BASE_NODE {
+    struct AttachmentTransition {
+        uint32_t attachment;
+        VkImageLayout old_layout;
+        VkImageLayout new_layout;
+        AttachmentTransition(uint32_t attachment_, VkImageLayout old_layout_, VkImageLayout new_layout_)
+            : attachment(attachment_), old_layout(old_layout_), new_layout(new_layout_) {}
+    };
+
     VkRenderPass renderPass;
     safe_VkRenderPassCreateInfo2 createInfo;
     std::vector<std::vector<uint32_t>> self_dependencies;
     std::vector<DAGNode> subpassToNode;
     std::unordered_map<uint32_t, bool> attachment_first_read;
+    std::vector<uint32_t> attachment_first_subpass;
+    std::vector<uint32_t> attachment_last_subpass;
+    std::vector<SubpassDependencyGraphNode> subpass_dependencies;
+    std::vector<std::vector<AttachmentTransition>> subpass_transitions;
 
     RENDER_PASS_STATE(VkRenderPassCreateInfo2KHR const *pCreateInfo) : createInfo(pCreateInfo) {}
     RENDER_PASS_STATE(VkRenderPassCreateInfo const *pCreateInfo) {
