@@ -184,19 +184,19 @@ HazardResult AccessContext::DetectHazard(AddressType type, const Detector &detec
     // so we'll check these first
     for (const auto &async_context : async_) {
         hazard = async_context->DetectAsyncHazard(type, detector, range);
-        std::cout << "async_context->DetectAsyncHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end << std::endl;
+        //std::cout << "async_context->DetectAsyncHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end << std::endl;
         if (hazard.hazard) return hazard;
     }
 
     const auto &accesses = GetAccessStateMap(type);
     const auto from = accesses.lower_bound(range);
-    std::cout << "accesses.lower_bound: range" << "  " << range.begin << "  " << range.end << std::endl;
+    //std::cout << "accesses.lower_bound: range" << "  " << range.begin << "  " << range.end << std::endl;
     if (from != accesses.end() && from->first.intersects(range)) {
         const auto to = accesses.upper_bound(range);
         ResourceAccessRange gap = {range.begin, range.begin};
         for (auto pos = from; pos != to; ++pos) {
             hazard = detector.Detect(pos);
-            std::cout << "detector.Detect: pos" << hazard.hazard << "  " << pos->first.begin << "  " << pos->first.end << std::endl;
+            //std::cout << "detector.Detect: pos" << hazard.hazard << "  " << pos->first.begin << "  " << pos->first.end << std::endl;
             if (hazard.hazard) return hazard;
 
             // make sure we don't go past range
@@ -207,8 +207,8 @@ HazardResult AccessContext::DetectHazard(AddressType type, const Detector &detec
             if (!gap.empty()) {
                 // Must recur on all gaps
                 hazard = DetectPreviousHazard(type, detector, gap);
-                std::cout << "empty DetectPreviousHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end
-                          << std::endl;
+                //std::cout << "empty DetectPreviousHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end
+                //          << std::endl;
                 if (hazard.hazard) return hazard;
             }
             gap.begin = upper_bound;
@@ -216,13 +216,13 @@ HazardResult AccessContext::DetectHazard(AddressType type, const Detector &detec
         gap.end = range.end;
         if (gap.non_empty()) {
             hazard = DetectPreviousHazard(type, detector, gap);
-            std::cout << "non_empty DetectPreviousHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end
-                      << std::endl;
+            //std::cout << "non_empty DetectPreviousHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end
+            //          << std::endl;
             if (hazard.hazard) return hazard;
         }
     } else {
         hazard = DetectPreviousHazard(type, detector, range);
-        std::cout << "else DetectPreviousHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end << std::endl;
+        //std::cout << "else DetectPreviousHazard:" << hazard.hazard << "  " << range.begin << "  " << range.end << std::endl;
     }
 
     return hazard;
@@ -312,7 +312,7 @@ void AccessContext::ResolvePreviousAccess(const IMAGE_STATE &image_state, const 
     auto subresource_range = NormalizeSubresourceRange(image_state.createInfo, subresource_range_arg);
     subresource_adapter::ImageRangeGenerator range_gen(image_state.fragment_encoder, subresource_range, {0, 0, 0},
                                                        image_state.createInfo.extent);
-    std::cout << "ResolvePreviousAccess  VkImage:" << image_state.image << std::endl;
+    //std::cout << "ResolvePreviousAccess  VkImage:" << image_state.image << std::endl;
     const auto base_address = ResourceBaseAddress(image_state);
     for (; range_gen->non_empty(); ++range_gen) {
         ResolvePreviousAccess(address_type, (*range_gen + base_address), descent_map, infill_state);
@@ -339,7 +339,7 @@ HazardResult AccessContext::DetectHazard(AddressType type, SyncStageAccessIndex 
 HazardResult AccessContext::DetectHazard(const BUFFER_STATE &buffer, SyncStageAccessIndex usage_index,
                                          const ResourceAccessRange &range) const {
     if (!SimpleBinding(buffer)) return HazardResult();
-    std::cout << "DetectHazard  VkBuffer:" << buffer.buffer << "  SyncStageAccessIndex " << usage_index << std::endl;
+    //std::cout << "DetectHazard  VkBuffer:" << buffer.buffer << "  SyncStageAccessIndex " << usage_index << std::endl;
     return DetectHazard(AddressType::kLinearAddress, usage_index, range + ResourceBaseAddress(buffer));
 }
 
@@ -353,7 +353,7 @@ HazardResult AccessContext::DetectHazard(const IMAGE_STATE &image, SyncStageAcce
     subresource_adapter::ImageRangeGenerator range_gen(image.fragment_encoder, subresource_range, offset, extent);
     const auto address_type = ImageAddressType(image);
     const auto base_address = ResourceBaseAddress(image);
-    std::cout << "DetectHazard  VkImage:" << image.image << "  SyncStageAccessIndex " << current_usage << std::endl;
+    //std::cout << "DetectHazard  VkImage:" << image.image << "  SyncStageAccessIndex " << current_usage << std::endl;
     for (; range_gen->non_empty(); ++range_gen) {
         HazardResult hazard = DetectHazard(address_type, current_usage, (*range_gen + base_address));
         if (hazard.hazard) return hazard;
@@ -400,7 +400,7 @@ HazardResult AccessContext::DetectImageBarrierHazard(const IMAGE_STATE &image, V
                                                        image.createInfo.extent);
     const auto address_type = ImageAddressType(image);
     const auto base_address = ResourceBaseAddress(image);
-    std::cout << "DetectImageBarrierHazard  VkImage:" << image.image << std::endl;
+    //std::cout << "DetectImageBarrierHazard  VkImage:" << image.image << std::endl;
     for (; range_gen->non_empty(); ++range_gen) {
         HazardResult hazard = DetectBarrierHazard(address_type, SyncStageAccessIndex::SYNC_IMAGE_LAYOUT_TRANSITION, src_exec_scope,
                                                   src_access_scope, (*range_gen + base_address));
@@ -469,8 +469,8 @@ void UpdateMemoryAccessState(ResourceAccessRangeMap *accesses, const ResourceAcc
             // Need to infill if next is disjoint
             VkDeviceSize limit = (next == the_end) ? range.end : std::min(range.end, next->first.begin);
             ResourceAccessRange new_range(pos->first.end, limit);
-            std::cout << "pos " << pos->first.begin << "  " << pos->first.end << std::endl;
-            std::cout << "new_range" << limit << "  " << new_range.begin << "  " << new_range.end << std::endl;
+            //std::cout << "pos " << pos->first.begin << "  " << pos->first.end << std::endl;
+            //std::cout << "new_range" << limit << "  " << new_range.begin << "  " << new_range.end << std::endl;
             next = action.Infill(accesses, next, new_range);
         }
         pos = next;
@@ -566,7 +566,7 @@ void AccessContext::UpdateAccessState(const BUFFER_STATE &buffer, SyncStageAcces
                                       const ResourceAccessRange &range, const ResourceUsageTag &tag) {
     if (!SimpleBinding(buffer)) return;
     const auto base_address = ResourceBaseAddress(buffer);
-    std::cout << "UpdateAccessState  VkBuffer:" << buffer.buffer << "  SyncStageAccessIndex " << current_usage << std::endl;
+    //std::cout << "UpdateAccessState  VkBuffer:" << buffer.buffer << "  SyncStageAccessIndex " << current_usage << std::endl;
     UpdateAccessState(AddressType::kLinearAddress, current_usage, range + base_address, tag);
 }
 void AccessContext::UpdateAccessState(const IMAGE_STATE &image, SyncStageAccessIndex current_usage,
@@ -580,7 +580,7 @@ void AccessContext::UpdateAccessState(const IMAGE_STATE &image, SyncStageAccessI
     const VulkanTypedHandle handle(image.image, kVulkanObjectTypeImage);
     const auto address_type = ImageAddressType(image);
     const auto base_address = ResourceBaseAddress(image);
-    std::cout << "UpdateAccessState  VkImage:" << image.image << "  SyncStageAccessIndex " << current_usage << std::endl;
+    //std::cout << "UpdateAccessState  VkImage:" << image.image << "  SyncStageAccessIndex " << current_usage << std::endl;
     UpdateMemoryAccessStateFunctor action(address_type, *this, current_usage, tag);
     for (; range_gen->non_empty(); ++range_gen) {
         UpdateMemoryAccessState(&GetAccessStateMap(address_type), (*range_gen + base_address), action);
@@ -603,7 +603,7 @@ void AccessContext::UpdateMemoryAccess(const IMAGE_STATE &image, const VkImageSu
 
     subresource_adapter::ImageRangeGenerator range_gen(image.fragment_encoder, subresource_range, {0, 0, 0},
                                                        image.createInfo.extent);
-    std::cout << "UpdateMemoryAccess  VkImage:" << image.image << std::endl;
+    //std::cout << "UpdateMemoryAccess  VkImage:" << image.image << std::endl;
     const auto base_address = ResourceBaseAddress(image);
     for (; range_gen->non_empty(); ++range_gen) {
         UpdateMemoryAccessState(accesses, (*range_gen + base_address), action);
@@ -997,7 +997,7 @@ bool SyncValidator::PreCallValidateCmdCopyImage(VkCommandBuffer commandBuffer, V
     const auto *context = cb_access_context->GetCurrentAccessContext();
     assert(context);
     if (!context) return skip;
-    std::cout << "PreCallValidateCmdCopyImage srcImage:" << srcImage << "  dstImage:" << dstImage << std::endl;
+    //std::cout << "PreCallValidateCmdCopyImage srcImage:" << srcImage << "  dstImage:" << dstImage << std::endl;
 
     const auto *src_image = Get<IMAGE_STATE>(srcImage);
     const auto *dst_image = Get<IMAGE_STATE>(dstImage);
@@ -1007,7 +1007,7 @@ bool SyncValidator::PreCallValidateCmdCopyImage(VkCommandBuffer commandBuffer, V
             auto hazard = context->DetectHazard(*src_image, SYNC_TRANSFER_TRANSFER_READ, copy_region.srcSubresource,
                                                 copy_region.srcOffset, copy_region.extent);
             if (hazard.hazard) {
-                std::cout << "fail PreCallValidateCmdCopyImage: srcImage:" << srcImage << std::endl;
+                //std::cout << "fail PreCallValidateCmdCopyImage: srcImage:" << srcImage << std::endl;
                 skip |= LogError(srcImage, string_SyncHazardVUID(hazard.hazard),
                                  "vkCmdCopyImage: Hazard %s for srcImage %s, region %" PRIu32, string_SyncHazard(hazard.hazard),
                                  report_data->FormatHandle(srcImage).c_str(), region);
@@ -1020,7 +1020,7 @@ bool SyncValidator::PreCallValidateCmdCopyImage(VkCommandBuffer commandBuffer, V
             auto hazard = context->DetectHazard(*dst_image, SYNC_TRANSFER_TRANSFER_WRITE, copy_region.dstSubresource,
                                                 copy_region.dstOffset, dst_copy_extent);
             if (hazard.hazard) {
-                std::cout << "fail PreCallValidateCmdCopyImage: dstImage:" << dstImage << std::endl;
+                //std::cout << "fail PreCallValidateCmdCopyImage: dstImage:" << dstImage << std::endl;
                 skip |= LogError(dstImage, string_SyncHazardVUID(hazard.hazard),
                                  "vkCmdCopyImage: Hazard %s for dstImage %s, region %" PRIu32, string_SyncHazard(hazard.hazard),
                                  report_data->FormatHandle(dstImage).c_str(), region);
@@ -1039,7 +1039,7 @@ void SyncValidator::PreCallRecordCmdCopyImage(VkCommandBuffer commandBuffer, VkI
     assert(cb_access_context);
     auto *context = cb_access_context->GetCurrentAccessContext();
     assert(context);
-    std::cout << "PreCallRecordCmdCopyImage srcImage:" << srcImage << "  dstImage:" << dstImage << std::endl;
+    //std::cout << "PreCallRecordCmdCopyImage srcImage:" << srcImage << "  dstImage:" << dstImage << std::endl;
 
     auto *src_image = Get<IMAGE_STATE>(srcImage);
     auto *dst_image = Get<IMAGE_STATE>(dstImage);
@@ -1070,7 +1070,7 @@ bool SyncValidator::PreCallValidateCmdPipelineBarrier(VkCommandBuffer commandBuf
     const auto *cb_access_context = GetAccessContext(commandBuffer);
     assert(cb_access_context);
     if (!cb_access_context) return skip;
-    std::cout << "PreCallValidateCmdPipelineBarrier" << std::endl;
+    //std::cout << "PreCallValidateCmdPipelineBarrier" << std::endl;
 
     const auto *context = cb_access_context->GetCurrentAccessContext();
     assert(context);
@@ -1084,12 +1084,12 @@ bool SyncValidator::PreCallValidateCmdPipelineBarrier(VkCommandBuffer commandBuf
         const auto &barrier = pImageMemoryBarriers[index];
         if (barrier.newLayout == barrier.oldLayout) continue;  // Only interested in layout transitions at this point.
         const auto *image_state = Get<IMAGE_STATE>(barrier.image);
-        std::cout << "PreCallValidateCmdPipelineBarrier barrier.image: " << barrier.image << std::endl;
+        //std::cout << "PreCallValidateCmdPipelineBarrier barrier.image: " << barrier.image << std::endl;
 
         if (!image_state) continue;
         const auto hazard = context->DetectImageBarrierHazard(*image_state, src_exec_scope, src_stage_accesses, barrier);
         if (hazard.hazard) {
-            std::cout << "fail PreCallValidateCmdPipelineBarrier: barrier.image: " << barrier.image << std::endl;
+            //std::cout << "fail PreCallValidateCmdPipelineBarrier: barrier.image: " << barrier.image << std::endl;
             // TODO -- add tag information to log msg when useful.
             skip |= LogError(barrier.image, string_SyncHazardVUID(hazard.hazard),
                              "vkCmdPipelineBarrier: Hazard %s for image barrier %" PRIu32 " %s", string_SyncHazard(hazard.hazard),
@@ -1116,7 +1116,7 @@ void SyncValidator::PreCallRecordCmdPipelineBarrier(VkCommandBuffer commandBuffe
     for (uint32_t index = 0; index < imageMemoryBarrierCount; index++) {
         const auto &barrier = pImageMemoryBarriers[index];
         if (barrier.newLayout == barrier.oldLayout) continue;  // Only interested in layout transitions at this point.
-        std::cout << "PreCallRecordCmdPipelineBarrier barrier.image " << barrier.image << std::endl;
+        //std::cout << "PreCallRecordCmdPipelineBarrier barrier.image " << barrier.image << std::endl;
     }
     const auto src_stage_mask = ExpandPipelineStages(cb_access_context->GetQueueFlags(), srcStageMask);
     auto src_stage_accesses = AccessScopeByStage(src_stage_mask);
@@ -1265,7 +1265,7 @@ bool SyncValidator::PreCallValidateCmdCopyBufferToImage(VkCommandBuffer commandB
 
     const auto *src_buffer = Get<BUFFER_STATE>(srcBuffer);
     const auto *dst_image = Get<IMAGE_STATE>(dstImage);
-    std::cout << "PreCallValidateCmdCopyBufferToImage  srcBuffer " << srcBuffer << "   dstImage " << dstImage << std::endl;
+    //std::cout << "PreCallValidateCmdCopyBufferToImage  srcBuffer " << srcBuffer << "   dstImage " << dstImage << std::endl;
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &copy_region = pRegions[region];
         if (src_buffer) {
@@ -1283,7 +1283,7 @@ bool SyncValidator::PreCallValidateCmdCopyBufferToImage(VkCommandBuffer commandB
             auto hazard = context->DetectHazard(*dst_image, SYNC_TRANSFER_TRANSFER_WRITE, copy_region.imageSubresource,
                                                 copy_region.imageOffset, copy_region.imageExtent);
             if (hazard.hazard) {
-                std::cout << "fail PreCallValidateCmdPipelineBarrier: dstImage " << dstImage << std::endl;
+                //std::cout << "fail PreCallValidateCmdPipelineBarrier: dstImage " << dstImage << std::endl;
                 skip |= LogError(dstImage, string_SyncHazardVUID(hazard.hazard),
                                  "vkCmdCopyBufferToImage: Hazard %s for dstImage %s, region %" PRIu32,
                                  string_SyncHazard(hazard.hazard), report_data->FormatHandle(dstImage).c_str(), region);
@@ -1305,7 +1305,7 @@ void SyncValidator::PreCallRecordCmdCopyBufferToImage(VkCommandBuffer commandBuf
 
     const auto *src_buffer = Get<BUFFER_STATE>(srcBuffer);
     const auto *dst_image = Get<IMAGE_STATE>(dstImage);
-    std::cout << "PreCallRecordCmdCopyBufferToImage   srcBuffer " << srcBuffer << "   dstImage " << dstImage << std::endl;
+    //std::cout << "PreCallRecordCmdCopyBufferToImage   srcBuffer " << srcBuffer << "   dstImage " << dstImage << std::endl;
 
     for (uint32_t region = 0; region < regionCount; region++) {
         const auto &copy_region = pRegions[region];
@@ -1332,7 +1332,7 @@ bool SyncValidator::PreCallValidateCmdCopyImageToBuffer(VkCommandBuffer commandB
     const auto *context = cb_access_context->GetCurrentAccessContext();
     assert(context);
     if (!context) return skip;
-    std::cout << "PreCallValidateCmdCopyImageToBuffer  srcImage" << srcImage << "   dstBuffer " << dstBuffer << std::endl;
+    //std::cout << "PreCallValidateCmdCopyImageToBuffer  srcImage" << srcImage << "   dstBuffer " << dstBuffer << std::endl;
 
     const auto *src_image = Get<IMAGE_STATE>(srcImage);
     const auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
@@ -1343,7 +1343,7 @@ bool SyncValidator::PreCallValidateCmdCopyImageToBuffer(VkCommandBuffer commandB
             auto hazard = context->DetectHazard(*src_image, SYNC_TRANSFER_TRANSFER_READ, copy_region.imageSubresource,
                                                 copy_region.imageOffset, copy_region.imageExtent);
             if (hazard.hazard) {
-                std::cout << "fail PreCallValidateCmdCopyImageToBuffer: srcImage " << srcImage << std::endl;
+                //std::cout << "fail PreCallValidateCmdCopyImageToBuffer: srcImage " << srcImage << std::endl;
                 skip |= LogError(srcImage, string_SyncHazardVUID(hazard.hazard),
                                  "vkCmdCopyImageToBuffer: Hazard %s for srcImage %s, region %" PRIu32,
                                  string_SyncHazard(hazard.hazard), report_data->FormatHandle(srcImage).c_str(), region);
@@ -1370,7 +1370,7 @@ void SyncValidator::PreCallRecordCmdCopyImageToBuffer(VkCommandBuffer commandBuf
     assert(cb_access_context);
     auto *context = cb_access_context->GetCurrentAccessContext();
     assert(context);
-    std::cout << "PreCallRecordCmdCopyImageToBuffer  srcImage " << srcImage << "  dstBuffer: " << dstBuffer << std::endl;
+    //std::cout << "PreCallRecordCmdCopyImageToBuffer  srcImage " << srcImage << "  dstBuffer: " << dstBuffer << std::endl;
 
     const auto *src_image = Get<IMAGE_STATE>(srcImage);
     auto *dst_buffer = Get<BUFFER_STATE>(dstBuffer);
@@ -1398,7 +1398,7 @@ bool SyncValidator::PreCallValidateCmdBlitImage(VkCommandBuffer commandBuffer, V
     const auto *cb_access_context = GetAccessContext(commandBuffer);
     assert(cb_access_context);
     if (!cb_access_context) return skip;
-    std::cout << "PreCallValidateCmdBlitImage  srcImage " << srcImage << "  dstImage:" << dstImage << std::endl;
+    //std::cout << "PreCallValidateCmdBlitImage  srcImage " << srcImage << "  dstImage:" << dstImage << std::endl;
 
     const auto *context = cb_access_context->GetCurrentAccessContext();
     assert(context);
@@ -1416,7 +1416,7 @@ bool SyncValidator::PreCallValidateCmdBlitImage(VkCommandBuffer commandBuffer, V
             auto hazard = context->DetectHazard(*src_image, SYNC_TRANSFER_TRANSFER_READ, blit_region.srcSubresource,
                                                 blit_region.srcOffsets[0], extent);
             if (hazard.hazard) {
-                std::cout << "fail PreCallValidateCmdBlitImage: srcImage " << srcImage << std::endl;
+                //std::cout << "fail PreCallValidateCmdBlitImage: srcImage " << srcImage << std::endl;
                 skip |= LogError(srcImage, string_SyncHazardVUID(hazard.hazard),
                                  "vkCmdBlitImage: Hazard %s for srcImage %s, region %" PRIu32, string_SyncHazard(hazard.hazard),
                                  report_data->FormatHandle(srcImage).c_str(), region);
@@ -1430,7 +1430,7 @@ bool SyncValidator::PreCallValidateCmdBlitImage(VkCommandBuffer commandBuffer, V
             auto hazard = context->DetectHazard(*dst_image, SYNC_TRANSFER_TRANSFER_WRITE, blit_region.dstSubresource,
                                                 blit_region.dstOffsets[0], extent);
             if (hazard.hazard) {
-                std::cout << "fail PreCallValidateCmdBlitImage: dstImage " << dstImage << std::endl;
+                //std::cout << "fail PreCallValidateCmdBlitImage: dstImage " << dstImage << std::endl;
                 skip |= LogError(dstImage, string_SyncHazardVUID(hazard.hazard),
                                  "vkCmdBlitImage: Hazard %s for dstImage %s, region %" PRIu32, string_SyncHazard(hazard.hazard),
                                  report_data->FormatHandle(dstImage).c_str(), region);
@@ -1449,7 +1449,7 @@ void SyncValidator::PreCallRecordCmdBlitImage(VkCommandBuffer commandBuffer, VkI
     assert(cb_access_context);
     auto *context = cb_access_context->GetCurrentAccessContext();
     assert(context);
-    std::cout << "PreCallRecordCmdBlitImage  srcImage " << srcImage << "  dstImage:" << dstImage << std::endl;
+    //std::cout << "PreCallRecordCmdBlitImage  srcImage " << srcImage << "  dstImage:" << dstImage << std::endl;
 
     auto *src_image = Get<IMAGE_STATE>(srcImage);
     auto *dst_image = Get<IMAGE_STATE>(dstImage);

@@ -271,16 +271,17 @@ ImageRangeEncoder::ImageRangeEncoder(const VkDevice device, const IMAGE_STATE& i
 ImageRangeEncoder::ImageRangeEncoder(const VkDevice device, const IMAGE_STATE& image, const AspectParameters* param)
     : RangeEncoder(image, param), image_(&image) {
     VkSubresourceLayout layout = {};
+    VkSubresourceLayout layout1 = {};
     VkImageSubresource subres = {};
     VkExtent2D divisors = {};
     VkImageSubresourceLayers subres_layers = {limits_.aspectMask, 0, 0, limits_.arrayLayer};
     actual_memory_ = false;
-    std::cout << "VkImage: " << image.image << std::endl;
+    //std::cout << "VkImage: " << image.image << std::endl;
     if (image_->createInfo.tiling != VK_IMAGE_TILING_OPTIMAL) {
-        subres = {VkImageAspectFlags(AspectBit(0)), 0, 0};
+        subres = {static_cast<VkImageAspectFlags>(AspectBit(0)), 0, 0};
         DispatchGetImageSubresourceLayout(device, image_->image, &subres, &layout);
-        std::cout << "layout TEST: " << layout.arrayPitch << "  " << layout.depthPitch << "  " << layout.offset << "  "
-                  << layout.rowPitch << "  " << layout.size << std::endl;
+        //std::cout << "layout TEST: " << layout.offset << "  " << layout.size << "  " << layout.rowPitch << "  " << layout.depthPitch
+        //          << "  " << layout.arrayPitch << std::endl;
         if (layout.size == 0) {
             actual_memory_ = false;
         } else {
@@ -293,30 +294,36 @@ ImageRangeEncoder::ImageRangeEncoder(const VkDevice device, const IMAGE_STATE& i
         subres_extents_.push_back(subres_extent);
 
         for (uint32_t aspect_index = 0; aspect_index < limits_.aspect_index; ++aspect_index) {
-            VkImageAspectFlagBits aspectBit = AspectBit(aspect_index);
+            VkImageAspectFlags aspectBit = static_cast<VkImageAspectFlags>(AspectBit(aspect_index));
             if (mip_index == 0) {
-                element_sizes_.push_back(FormatElementSize(image.createInfo.format, aspectBit));
+                element_sizes_.push_back(static_cast<uint32_t>(ceil(FormatTexelSize(image.createInfo.format, aspectBit))));
+                //element_sizes_.push_back(FormatElementSize(image.createInfo.format, aspectBit));
             }
-            if (actual_memory_) {
-                subres = {VkImageAspectFlags(aspectBit), mip_index, 0};
+            subres = {aspectBit, mip_index, 0};
+            std::cout << "subres: " << subres.aspectMask << "  " << subres.mipLevel << "  " << element_sizes_[aspect_index] << "  "
+                      << subres_extent.width << "  " << subres_extent.height << std::endl;
+            //if (actual_memory_) {
                 DispatchGetImageSubresourceLayout(device, image_->image, &subres, &layout);
-                std::cout << "actual_memory:\nsubres: " << subres.aspectMask << "  " << subres.mipLevel << std::endl;
-                std::cout << "layout: " << layout.arrayPitch << "  " << layout.depthPitch << "  " << layout.offset << "  "
-                          << layout.rowPitch << "  " << layout.size << std::endl;
+            std::cout << "actual_memory layout: " << layout.offset << "  " << layout.size << "  " << layout.rowPitch << "  "
+                      << layout.depthPitch << "  " << layout.arrayPitch << "  "
+                      << ((subres_extent.height - 1) * layout.rowPitch + (subres_extent.width - 1) * element_sizes_[aspect_index] +
+                          layout.offset)
+                      << std::endl;
                 subres_layouts_.push_back(layout);
-            } else {
+            //} else {
                 divisors = FindMultiplaneExtentDivisors(image.createInfo.format, aspectBit);
-                layout.offset += layout.size;
-                layout.rowPitch = subres_extent.width * element_sizes_[aspect_index] / divisors.width;
-                layout.arrayPitch = layout.rowPitch * subres_extent.height / divisors.height;
-                layout.depthPitch = layout.arrayPitch;
-                layout.size = layout.arrayPitch * limits_.arrayLayer;
-                std::cout << "ideal_memory:\nsubres: " << VkImageAspectFlags(aspectBit) <<"  "<< mip_index
+                layout1.offset += layout1.size;
+                layout1.rowPitch = subres_extent.width * element_sizes_[aspect_index] / divisors.width;
+                layout1.arrayPitch = layout1.rowPitch * subres_extent.height / divisors.height;
+                layout1.depthPitch = layout1.arrayPitch;
+                layout1.size = layout1.arrayPitch * limits_.arrayLayer;
+                std::cout << "ideal_memory layout1: " << layout1.offset << "  " << layout1.size << "  " << layout1.rowPitch << "  "
+                          << layout1.depthPitch << "  " << layout1.arrayPitch << "  "
+                          << ((subres_extent.height - 1) * layout1.rowPitch +
+                              (subres_extent.width - 1) * element_sizes_[aspect_index] + layout1.offset)
                           << std::endl;
-                std::cout << "layout: " << layout.arrayPitch << "  " << layout.depthPitch << "  " << layout.offset << "  "
-                          << layout.rowPitch << "  " << layout.size << std::endl;
-                subres_layouts_.push_back(layout);
-            }
+                //subres_layouts_.push_back(layout);
+            //}
         }
     }
 }
@@ -359,16 +366,14 @@ void ImageRangeGenerator::SetPos() {
                                  subres_range_.baseMipLevel + mip_level_index_, subres_range_.baseArrayLayer};
     subres_layout_ = &(encoder_->SubresourceLayout(subres));
     pos_.begin = encoder_->Encode(subres, subres_range_.baseArrayLayer, offset_);
-    const auto& subres_extent = encoder_->SubresourceExtent(subres.mipLevel);
-    pos_.end = pos_.begin +
-               encoder_->ElementSize(aspect_index_) * ((extent_.width < subres_extent.width) ? extent_.width : subres_extent.width);
+    pos_.end = pos_.begin + encoder_->ElementSize(aspect_index_) * extent_.width;
     offset_layer_base_ = pos_;
     offset_offset_y_base_ = pos_;
     arrayLayer_index_ = 0;
     offset_y_index_ = 0;
     Subresource limits = encoder_->Limits();
     aspect_count_ = limits.aspect_index;
-    offset_y_count_ = static_cast<int32_t>((extent_.height < subres_extent.height) ? extent_.height : subres_extent.height);
+    offset_y_count_ = static_cast<int32_t>(extent_.height);
 
     if ((offset_.z + extent_.depth) == 1) {
         layer_count_ = limits.arrayLayer - subres_range_.baseArrayLayer;

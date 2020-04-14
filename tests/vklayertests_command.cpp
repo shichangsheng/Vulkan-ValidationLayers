@@ -19,7 +19,7 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
         printf("%s No compressed formats supported - CompressedImageMipCopyTests skipped.\n", kSkipPrefix);
         return;
     }
-
+    //compressed_format = VK_FORMAT_B8G8R8A8_UNORM;
     VkImageCreateInfo ci;
     ci.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     ci.pNext = NULL;
@@ -48,6 +48,33 @@ TEST_F(VkLayerTest, CompressedImageMipCopyTests) {
     odd_image.init(&ci);
     ASSERT_TRUE(odd_image.initialized());
 
+    ci.mipLevels = 1;
+    //ci.format = VK_FORMAT_R16G16B16_UNORM;
+    ci.format = VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM;
+    ci.tiling = VK_IMAGE_TILING_LINEAR;
+    VkImageObj image_linear(m_device);
+    std::cout << "image_linear: " << std::endl;
+    image_linear.init(&ci);
+    ASSERT_TRUE(image_linear.initialized());
+
+    ci.extent = {33, 65, 1};
+    VkImageObj image_linear31(m_device);
+    std::cout << "image_linear31: " << std::endl;
+    image_linear31.init(&ci);
+    ASSERT_TRUE(image_linear31.initialized());
+
+    ci.extent = {65, 33, 1};
+    VkImageObj image_linear32(m_device);
+    std::cout << "image_linear32: " << std::endl;
+    image_linear32.init(&ci);
+    ASSERT_TRUE(image_linear32.initialized());
+
+    ci.extent = {33, 35, 1};
+    VkImageObj image_linear33(m_device);
+    std::cout << "image_linear33: " << std::endl;
+    image_linear33.init(&ci);
+    ASSERT_TRUE(image_linear33.initialized());
+    return;
     // Allocate buffers
     VkMemoryPropertyFlags reqs = 0;
     VkBufferObj buffer_1024, buffer_64, buffer_16, buffer_8;

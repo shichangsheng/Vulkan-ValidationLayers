@@ -502,6 +502,7 @@ BINDABLE *ValidationStateTracker::GetObjectMemBinding(const VulkanTypedHandle &t
 
 void ValidationStateTracker::AddMemObjInfo(void *object, const VkDeviceMemory mem, const VkMemoryAllocateInfo *pAllocateInfo) {
     assert(object != NULL);
+    std::cout << "AddMemObjInfo: pAllocateInfo->allocationSize: " << pAllocateInfo->allocationSize << std::endl;
 
     auto fake_address = fake_memory.Alloc(pAllocateInfo->allocationSize);
     memObjMap[mem] = std::make_shared<DEVICE_MEMORY_STATE>(object, mem, pAllocateInfo, fake_address);
