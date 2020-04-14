@@ -52,6 +52,7 @@ bool wrap_handles = true;
 #include "object_lifetime_validation.h"
 #include "debug_printf.h"
 #include "stateless_validation.h"
+#include "synchronization_validation.h"
 #include "thread_safety.h"
 
 namespace vulkan_layer_chassis {
@@ -443,6 +444,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *pCreat
     }
     ProcessConfigAndEnvSettings(OBJECT_LAYER_DESCRIPTION, &local_enables, &local_disables);
 
+    // ZZZ WIP Force sync_val on:
+    local_enables.sync_validation = true;
+
     // Create temporary dispatch vector for pre-calls until instance is created
     std::vector<ValidationObject*> local_object_dispatch;
     // Add VOs to dispatch vector. Order here will be the validation dispatch order!
@@ -495,6 +499,13 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *pCreat
     debug_printf->container_type = LayerObjectTypeDebugPrintf;
     debug_printf->api_version = api_version;
     debug_printf->report_data = report_data;
+    auto sync_validation = new SyncValidator;
+    if (local_enables.sync_validation) {
+        local_object_dispatch.emplace_back(sync_validation);
+    }
+    sync_validation->container_type = LayerObjectTypeSyncValidation;
+    sync_validation->api_version = api_version;
+    sync_validation->report_data = report_data;
 
     // If handle wrapping is disabled via the ValidationFeatures extension, override build flag
     if (local_disables.handle_wrapping) {
@@ -550,6 +561,9 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateInstance(const VkInstanceCreateInfo *pCreat
     debug_printf->instance_dispatch_table = framework->instance_dispatch_table;
     debug_printf->enabled = framework->enabled;
     debug_printf->disabled = framework->disabled;
+    sync_validation->instance_dispatch_table = framework->instance_dispatch_table;
+    sync_validation->enabled = framework->enabled;
+    sync_validation->disabled = framework->disabled;
 
     for (auto intercept : framework->object_dispatch) {
         intercept->PostCallRecordCreateInstance(pCreateInfo, pAllocator, pInstance, result);
@@ -702,6 +716,13 @@ VKAPI_ATTR VkResult VKAPI_CALL CreateDevice(VkPhysicalDevice gpu, const VkDevice
         debug_printf->GetValidationObject(instance_interceptor->object_dispatch, LayerObjectTypeDebugPrintf));
     if (instance_interceptor->enabled.debug_printf) {
         device_interceptor->object_dispatch.emplace_back(debug_printf);
+    }
+    auto sync_validation = new SyncValidator;
+    sync_validation->container_type = LayerObjectTypeSyncValidation;
+    sync_validation->instance_state = reinterpret_cast<SyncValidator *>(
+        sync_validation->GetValidationObject(instance_interceptor->object_dispatch, LayerObjectTypeSyncValidation));
+    if (instance_interceptor->enabled.sync_validation) {
+        device_interceptor->object_dispatch.emplace_back(sync_validation);
     }
 
     // Set per-intercept common data items

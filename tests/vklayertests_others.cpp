@@ -3942,7 +3942,9 @@ TEST_F(VkLayerTest, AndroidHardwareBufferFetchUnboundImageInfo) {
     ici.pNext = &emici;
 
     m_errorMonitor->ExpectSuccess();
+    std::cout << "test 0000000" << std::endl;
     vk::CreateImage(dev, &ici, NULL, &img);
+    std::cout << "test 1111111" << std::endl;
     m_errorMonitor->VerifyNotFound();
 
     // attempt to fetch layout from unbound image
