@@ -1,6 +1,6 @@
-/* Copyright (c) 2015-2017, 2019 The Khronos Group Inc.
- * Copyright (c) 2015-2017, 2019 Valve Corporation
- * Copyright (c) 2015-2017, 2019 LunarG, Inc.
+/* Copyright (c) 2015-2017, 2019-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2017, 2019-2021 Valve Corporation
+ * Copyright (c) 2015-2017, 2019-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,252 @@
  * limitations under the License.
  *
  * Author: Tobin Ehlis <tobine@google.com>
+ * Author: Jeff Bolz <jbolz@nvidia.com>
+ * Author: John Zulauf <jzulauf@lunarg.com>
+
  */
 
 #ifndef LAYER_DATA_H
 #define LAYER_DATA_H
 
 #include <cassert>
+#include <limits>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <algorithm>
+
+// A vector class with "small string optimization" -- meaning that the class contains a fixed working store for N elements.
+// Useful in in situations where the needed size is unknown, but the typical size is known  If size increases beyond the
+// fixed capacity, a dynamically allocated working store is created.
+//
+// NOTE: Unlike std::vector which only requires T to be CopyAssignable and CopyConstructable, small_vector requires T to be
+//       MoveAssignable and MoveConstructable
+// NOTE: Unlike std::vector, iterators are invalidated by move assignment between small_vector objects effectively the
+//       "small string" allocation functions as an incompatible allocator.
+template <typename T, size_t N, typename SizeType = uint8_t>
+class small_vector {
+  public:
+    using value_type = T;
+    using reference = value_type &;
+    using const_reference = const value_type &;
+    using pointer = value_type *;
+    using const_pointer = const value_type *;
+    using iterator = pointer;
+    using const_iterator = const_pointer;
+    using size_type = SizeType;
+    static const size_type kSmallCapacity = N;
+    static const size_type kMaxCapacity = std::numeric_limits<size_type>::max();
+    static_assert(N <= kMaxCapacity, "size must be less than size_type::max");
+
+    small_vector() : size_(0), capacity_(N) {}
+
+    small_vector(const small_vector &other) : size_(0), capacity_(N) {
+        reserve(other.size_);
+        auto dest = GetWorkingStore();
+        for (const auto &value : other) {
+            new (dest) value_type(value);
+            ++dest;
+        }
+        size_ = other.size_;
+    }
+
+    small_vector(small_vector &&other) : size_(0), capacity_(N) {
+        if (other.large_store_) {
+            // Can just take ownership of the other large store
+            large_store_ = std::move(other.large_store_);
+            capacity_ = other.capacity_;
+            other.capacity_ = kSmallCapacity;
+        } else {
+            auto dest = GetWorkingStore();
+            for (auto &value : other) {
+                new (dest) value_type(std::move(value));
+                value.~value_type();
+                ++dest;
+            }
+        }
+        size_ = other.size_;
+        other.size_ = 0;
+    }
+
+    bool operator==(const small_vector &rhs) const {
+        if (size_ != rhs.size_) return false;
+        auto value = begin();
+        for (const auto &rh_value : rhs) {
+            if (!(*value == rh_value)) {
+                return false;
+            }
+            ++value;
+        }
+        return true;
+    }
+
+    small_vector &operator=(const small_vector &other) {
+        if (this != &other) {
+            reserve(other.size_);  // reserve doesn't shrink!
+            auto dest = GetWorkingStore();
+            auto source = other.GetWorkingStore();
+
+            const auto overlap = std::min(size_, other.size_);
+            // Copy assign anywhere we have objects in this
+            for (size_type i = 0; i < overlap; i++) {
+                dest[i] = source[i];
+            }
+
+            // Copy construct anywhere we *don't* have objects in this
+            for (size_type i = overlap; i < other.size_; i++) {
+                new (dest + i) value_type(source[i]);
+            }
+
+            // Any entries in this past other_size_ must be cleaned up...
+            for (size_type i = other.size_; i < size_; i++) {
+                dest[i].~value_type();
+            }
+            size_ = other.size_;
+        }
+        return *this;
+    }
+
+    small_vector &operator=(small_vector &&other) {
+        if (this != &other) {
+            if (other.large_store_) {
+                clear();  // need to clean up any objects this owns.
+                // Can just take ownership of the other large store
+                large_store_ = std::move(other.large_store_);
+                capacity_ = other.capacity_;
+                size_ = other.size_;
+
+                other.capacity_ = kSmallCapacity;
+            } else {
+                // Other is using the small_store
+                auto source = other.begin();
+                iterator dest;
+                if (large_store_) {
+                    // If this is using large store do a wholesale clobber of it.
+                    ClearAndReset();
+                    dest = GetWorkingStore();
+                } else {
+                    // This is also using small store, so move assign where both have valid values
+                    dest = GetWorkingStore();
+                    // Move values where both vectors have valid values
+                    for (size_type i = 0; i < std::min(size_, other.size_); i++) {
+                        *dest = std::move(*source);
+                        source->~value_type();
+                        ++dest;
+                        ++source;
+                    }
+                }
+
+                // Other is bigger, placement new into the working store
+                // NOTE: this loop only runs when other is bigger
+                for (size_type i = size_; i < other.size_; i++) {
+                    new (dest) value_type(std::move(*source));
+                    source->~value_type();
+                    ++dest;
+                    ++source;
+                }
+                // Other is smaller, clean up the excess entries
+                // NOTE: this loop only runs when this is bigger
+                for (size_type i = other.size_; i < size_; i++) {
+                    dest->~value_type();
+                    ++dest;
+                }
+
+                size_ = other.size_;
+            }
+
+            // When we're done other has no valid contents (all are moved or destructed)
+            other.size_ = 0;
+        }
+        return *this;
+    }
+
+    reference operator[](size_type pos) {
+        assert(pos < size_);
+        return GetWorkingStore()[pos];
+    }
+    const_reference operator[](size_type pos) const {
+        assert(pos < size_);
+        return GetWorkingStore()[pos];
+    }
+
+    // Like std::vector::back, calling back on an empty container causes undefined behavior
+    reference back() {
+        assert(size_ > 0);
+        return GetWorkingStore()[size_ - 1];
+    }
+    const_reference back() const {
+        assert(size_ > 0);
+        return GetWorkingStore()[size_ - 1];
+    }
+
+    bool empty() const { return size_ == 0; }
+
+    template <class... Args>
+    void emplace_back(Args &&...args) {
+        assert(size_ < kMaxCapacity);
+        reserve(size_ + 1);
+        new (GetWorkingStore() + size_) value_type(args...);
+        size_++;
+    }
+
+    void reserve(size_type new_cap) {
+        // Since this can't shrink, if we're growing we're newing
+        if (new_cap > capacity_) {
+            assert(capacity_ >= kSmallCapacity);
+            auto new_store = std::unique_ptr<BackingStore[]>(new BackingStore[new_cap]);
+            auto new_values = reinterpret_cast<pointer>(new_store.get());
+            auto working_store = GetWorkingStore();
+            for (size_type i = 0; i < size_; i++) {
+                new (new_values + i) value_type(std::move(working_store[i]));
+                working_store[i].~value_type();
+            }
+            large_store_ = std::move(new_store);
+        }
+        // No shrink here.
+    }
+
+    void clear() {
+        auto working_store = GetWorkingStore();
+        for (size_type i = 0; i < size_; i++) {
+            working_store[i].~value_type();
+        }
+        size_ = 0;
+    }
+
+    inline iterator begin() { return GetWorkingStore(); }
+    inline const_iterator cbegin() const { return GetWorkingStore(); }
+    inline const_iterator begin() const { return GetWorkingStore(); }
+
+    inline iterator end() { return GetWorkingStore() + size_; }
+    inline const_iterator cend() const { return GetWorkingStore() + size_; }
+    inline const_iterator end() const { return GetWorkingStore() + size_; }
+    inline size_type size() const { return size_; }
+
+  protected:
+    inline const_pointer GetWorkingStore() const {
+        const BackingStore *store = large_store_ ? large_store_.get() : small_store_;
+        return reinterpret_cast<const_pointer>(store);
+    }
+    inline pointer GetWorkingStore() {
+        BackingStore *store = large_store_ ? large_store_.get() : small_store_;
+        return reinterpret_cast<pointer>(store);
+    }
+
+    void ClearAndReset() {
+        clear();
+        large_store_.reset();
+        capacity_ = kSmallCapacity;
+    }
+
+    struct alignas(alignof(value_type)) BackingStore {
+        uint8_t data[sizeof(value_type)];
+    };
+    size_type size_;
+    size_type capacity_;
+    BackingStore small_store_[N];
+    std::unique_ptr<BackingStore[]> large_store_;
+};
 
 // This is a wrapper around unordered_map that optimizes for the common case
 // of only containing a small number of elements. The first N elements are stored
@@ -193,7 +431,7 @@ class small_container {
 
     bool contains(const Key &key) const {
         for (int i = 0; i < N; ++i) {
-            if (value_type_helper().compare_equal(small_data[i], key) && small_data_allocated[i]) {
+            if (small_data_allocated[i] && value_type_helper().compare_equal(small_data[i], key)) {
                 return true;
             }
         }
@@ -208,7 +446,7 @@ class small_container {
 
     std::pair<iterator, bool> insert(const value_type &value) {
         for (int i = 0; i < N; ++i) {
-            if (value_type_helper().compare_equal(small_data[i], value) && small_data_allocated[i]) {
+            if (small_data_allocated[i] && value_type_helper().compare_equal(small_data[i], value)) {
                 iterator it;
                 it.parent = this;
                 it.index = i;
@@ -245,7 +483,7 @@ class small_container {
 
     typename inner_container_type::size_type erase(const Key &key) {
         for (int i = 0; i < N; ++i) {
-            if (value_type_helper().compare_equal(small_data[i], key) && small_data_allocated[i]) {
+            if (small_data_allocated[i] && value_type_helper().compare_equal(small_data[i], key)) {
                 small_data_allocated[i] = false;
                 return 1;
             }
@@ -317,7 +555,7 @@ class small_unordered_map
   public:
     T &operator[](const Key &key) {
         for (int i = 0; i < N; ++i) {
-            if (value_type_helper_map<Key, T>().compare_equal(this->small_data[i], key) && this->small_data_allocated[i]) {
+            if (this->small_data_allocated[i] && value_type_helper_map<Key, T>().compare_equal(this->small_data[i], key)) {
                 return this->small_data[i].second;
             }
         }
@@ -388,4 +626,48 @@ void FreeLayerDataPtr(void *data_key, std::unordered_map<void *, DATA_T *> &laye
     layer_data_map.erase(got);
 }
 
+// A C++11 approximation of std::optional
+template <typename T>
+struct Optional {
+  protected:
+    union Store {
+        Store(){};   // Do nothing.  That's the point.
+        ~Store(){};  // Not safe to destroy this object outside of it's stateful contain to clean up T if any.
+        typename std::aligned_storage<sizeof(T), alignof(T)>::type backing;
+        T obj;
+    };
+
+  public:
+    Optional() : init_(false) {}
+    ~Optional() {
+        if (init_) store_.obj.~T();
+    }
+    template <typename... Args>
+    T &emplace(const Args &...args) {
+        init_ = true;
+        new (&store_.backing) T(args...);
+        return store_.obj;
+    }
+    T *operator&() {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    const T *operator&() const {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    T *operator->() {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    const T *operator->() const {
+        if (init_) return &store_.obj;
+        return nullptr;
+    }
+    operator bool() const { return init_; }
+
+  protected:
+    Store store_;
+    bool init_;
+};
 #endif  // LAYER_DATA_H

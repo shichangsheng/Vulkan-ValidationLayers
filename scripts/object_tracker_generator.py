@@ -1,9 +1,9 @@
 #!/usr/bin/python3 -i
 #
-# Copyright (c) 2015-2020 The Khronos Group Inc.
-# Copyright (c) 2015-2020 Valve Corporation
-# Copyright (c) 2015-2020 LunarG, Inc.
-# Copyright (c) 2015-2020 Google Inc.
+# Copyright (c) 2015-2021 The Khronos Group Inc.
+# Copyright (c) 2015-2021 Valve Corporation
+# Copyright (c) 2015-2021 LunarG, Inc.
+# Copyright (c) 2015-2021 Google Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -67,6 +67,7 @@ class ObjectTrackerGeneratorOptions(GeneratorOptions):
                  conventions = None,
                  filename = None,
                  directory = '.',
+                 genpath = None,
                  apiname = None,
                  profile = None,
                  versions = '.*',
@@ -75,6 +76,7 @@ class ObjectTrackerGeneratorOptions(GeneratorOptions):
                  addExtensions = None,
                  removeExtensions = None,
                  emitExtensions = None,
+                 emitSpirv = None,
                  sortProcedure = regSortFeatures,
                  prefixText = "",
                  genFuncPointers = True,
@@ -88,9 +90,21 @@ class ObjectTrackerGeneratorOptions(GeneratorOptions):
                  alignFuncParam = 0,
                  expandEnumerants = True,
                  valid_usage_path = ''):
-        GeneratorOptions.__init__(self, conventions, filename, directory, apiname, profile,
-                                  versions, emitversions, defaultExtensions,
-                                  addExtensions, removeExtensions, emitExtensions, sortProcedure)
+        GeneratorOptions.__init__(self,
+                conventions = conventions,
+                filename = filename,
+                directory = directory,
+                genpath = genpath,
+                apiname = apiname,
+                profile = profile,
+                versions = versions,
+                emitversions = emitversions,
+                defaultExtensions = defaultExtensions,
+                addExtensions = addExtensions,
+                removeExtensions = removeExtensions,
+                emitExtensions = emitExtensions,
+                emitSpirv = emitSpirv,
+                sortProcedure = sortProcedure)
         self.prefixText      = prefixText
         self.genFuncPointers = genFuncPointers
         self.protectFile     = protectFile
@@ -135,6 +149,7 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         self.no_autogen_list = [
             'vkDestroyInstance',
             'vkCreateInstance',
+            'vkCreateDevice',
             'vkEnumeratePhysicalDevices',
             'vkGetPhysicalDeviceQueueFamilyProperties',
             'vkGetPhysicalDeviceQueueFamilyProperties2',
@@ -161,9 +176,6 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             'vkGetPhysicalDeviceDisplayProperties2KHR',
             'vkGetDisplayModePropertiesKHR',
             'vkGetDisplayModeProperties2KHR',
-            'vkAcquirePerformanceConfigurationINTEL',
-            'vkReleasePerformanceConfigurationINTEL',
-            'vkQueueSetPerformanceConfigurationINTEL',
             'vkCreateFramebuffer',
             'vkSetDebugUtilsObjectNameEXT',
             'vkSetDebugUtilsObjectTagEXT',
@@ -214,6 +226,7 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             "VkGraphicsPipelineCreateInfo-basePipelineHandle": "\"VUID-VkGraphicsPipelineCreateInfo-flags-00722\"",
             "VkComputePipelineCreateInfo-basePipelineHandle": "\"VUID-VkComputePipelineCreateInfo-flags-00697\"",
             "VkRayTracingPipelineCreateInfoNV-basePipelineHandle": "\"VUID-VkRayTracingPipelineCreateInfoNV-flags-03421\"",
+			"VkRayTracingPipelineCreateInfoKHR-basePipelineHandle": "\"VUID-VkRayTracingPipelineCreateInfoKHR-flags-03421\"",
            }
 
         # Commands shadowed by interface functions and are not implemented
@@ -262,7 +275,10 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             # Matching logic in parameter validation and ValidityOutputGenerator.isHandleOptional
             optString = param.attrib.get('noautovalidity')
             if optString and optString == 'true':
-                isoptional = True;
+                if param.attrib.get('len'):
+                    isoptional = [True, True]
+                else:
+                    isoptional = True
         return isoptional
     #
     # Get VUID identifier from implicit VUID tag
@@ -315,7 +331,10 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             for handle in self.object_types:
                 if self.handle_types.IsNonDispatchable(handle) and not self.is_aliased_type[handle]:
                     if (objtype == 'device' and self.handle_parents.IsParentDevice(handle)) or (objtype == 'instance' and not self.handle_parents.IsParentDevice(handle)):
-                        output_func += '    skip |= ReportLeaked%sObjects(%s, %s, error_code);\n' % (upper_objtype, objtype, self.GetVulkanObjType(handle))
+                        comment_prefix = ''
+                        if (handle == 'VkDisplayKHR' or handle == 'VkDisplayModeKHR'):
+                            comment_prefix = '// No destroy API -- do not report: '
+                        output_func += '    %sskip |= ReportLeaked%sObjects(%s, %s, error_code);\n' % (comment_prefix, upper_objtype, objtype, self.GetVulkanObjType(handle))
             output_func += '    return skip;\n'
             output_func += '}\n'
         return output_func
@@ -400,10 +419,10 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         copyright += '\n'
         copyright += '/***************************************************************************\n'
         copyright += ' *\n'
-        copyright += ' * Copyright (c) 2015-2020 The Khronos Group Inc.\n'
-        copyright += ' * Copyright (c) 2015-2020 Valve Corporation\n'
-        copyright += ' * Copyright (c) 2015-2020 LunarG, Inc.\n'
-        copyright += ' * Copyright (c) 2015-2020 Google Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 The Khronos Group Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 Valve Corporation\n'
+        copyright += ' * Copyright (c) 2015-2021 LunarG, Inc.\n'
+        copyright += ' * Copyright (c) 2015-2021 Google Inc.\n'
         copyright += ' *\n'
         copyright += ' * Licensed under the Apache License, Version 2.0 (the "License");\n'
         copyright += ' * you may not use this file except in compliance with the License.\n'
@@ -425,6 +444,10 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         self.newline()
         self.otwrite('cpp', '#include "chassis.h"')
         self.otwrite('cpp', '#include "object_lifetime_validation.h"')
+        self.newline()
+        self.otwrite('cpp', 'read_lock_guard_t ObjectLifetimes::read_lock() { return read_lock_guard_t(validation_object_mutex, std::defer_lock); }')
+        self.otwrite('cpp', 'write_lock_guard_t ObjectLifetimes::write_lock() { return write_lock_guard_t(validation_object_mutex, std::defer_lock); }')
+
 
     #
     # Now that the data is all collected and complete, generate and output the object validation routines
@@ -459,17 +482,19 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
                 self.otwrite('both', '\n')
 
 
-        self.otwrite('hdr', 'void PostCallRecordDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator);')
-        self.otwrite('hdr', 'void PreCallRecordResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties *pQueueFamilyProperties);')
-        self.otwrite('hdr', 'void PreCallRecordFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer *pCommandBuffers);')
-        self.otwrite('hdr', 'void PreCallRecordFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR *pQueueFamilyProperties);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR *pQueueFamilyProperties);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayPropertiesKHR *pProperties, VkResult result);')
-        self.otwrite('hdr', 'void PostCallRecordGetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModePropertiesKHR *pProperties, VkResult result);')
-        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayProperties2KHR *pProperties, VkResult result);')
-        self.otwrite('hdr', 'void PostCallRecordGetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModeProperties2KHR *pProperties, VkResult result);')
+        self.otwrite('hdr', 'void PostCallRecordDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator) override;')
+        self.otwrite('hdr', 'void PreCallRecordResetDescriptorPool(VkDevice device, VkDescriptorPool descriptorPool, VkDescriptorPoolResetFlags flags) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties *pQueueFamilyProperties) override;')
+        self.otwrite('hdr', 'void PreCallRecordFreeCommandBuffers(VkDevice device, VkCommandPool commandPool, uint32_t commandBufferCount, const VkCommandBuffer *pCommandBuffers) override;')
+        self.otwrite('hdr', 'void PreCallRecordFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2 *pQueueFamilyProperties) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2 *pQueueFamilyProperties) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayPropertiesKHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetDisplayModePropertiesKHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModePropertiesKHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t *pPropertyCount, VkDisplayProperties2KHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetDisplayModeProperties2KHR(VkPhysicalDevice physicalDevice, VkDisplayKHR display, uint32_t *pPropertyCount, VkDisplayModeProperties2KHR *pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlanePropertiesKHR* pProperties, VkResult result) override;')
+        self.otwrite('hdr', 'void PostCallRecordGetPhysicalDeviceDisplayPlaneProperties2KHR(VkPhysicalDevice physicalDevice, uint32_t* pPropertyCount, VkDisplayPlaneProperties2KHR* pProperties, VkResult result) override;')
         OutputGenerator.endFile(self)
     #
     # Processing point at beginning of each extension definition
@@ -723,11 +748,15 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         validate_code = ''
         record_code = ''
         object_array = False
-        if True in [destroy_txt in proto.text for destroy_txt in ['Destroy', 'Free']]:
+        allocator = 'pAllocator'
+        if True in [destroy_txt in proto.text for destroy_txt in ['Destroy', 'Free', 'ReleasePerformanceConfigurationINTEL']]:
             # Check for special case where multiple handles are returned
             if cmd_info[-1].len is not None:
                 object_array = True;
                 param = -1
+            elif 'ReleasePerformanceConfigurationINTEL' in proto.text:
+                param = -1
+                allocator = 'nullptr'
             else:
                 param = -2
             compatalloc_vuid_string = '%s-compatalloc' % cmd_info[param].name
@@ -741,7 +770,7 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
                 else:
                     dispobj = cmd_info[0].type
                     # Call Destroy a single time
-                    validate_code += '%sskip |= ValidateDestroyObject(%s, %s, pAllocator, %s, %s);\n' % (indent, cmd_info[param].name, self.GetVulkanObjType(cmd_info[param].type), compatalloc_vuid, nullalloc_vuid)
+                    validate_code += '%sskip |= ValidateDestroyObject(%s, %s, %s, %s, %s);\n' % (indent, cmd_info[param].name, self.GetVulkanObjType(cmd_info[param].type), allocator, compatalloc_vuid, nullalloc_vuid)
                     record_code += '%sRecordDestroyObject(%s, %s);\n' % (indent, cmd_info[param].name, self.GetVulkanObjType(cmd_info[param].type))
         return object_array, validate_code, record_code
     #
@@ -753,11 +782,25 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         param_vuid = self.GetVuid(parent_name, param_suffix)
         parent_vuid = self.GetVuid(parent_name, parent_suffix)
 
-        # If no parent VUID for this member, look for a commonparent VUID
-        if parent_vuid == 'kVUIDUndefined':
-            parent_vuid = self.GetVuid(parent_name, 'commonparent')
-        if obj_count is not None:
+        # TODO: Revise object 'parent' handling.  Each object definition in the XML specifies a parent, this should
+        #       all be handled in codegen (or at least called out)
+        # These objects do not have a VkDevice as their (ultimate) parent objecs, so skip the current code-gen'd parent checks
+        parent_exception_list = [
+            'VkPhysicalDevice',
+            'VkSwapchainKHR',
+            'VkDisplayKHR',
+            'VkSurfaceKHR',
+            'VkDisplayModeKHR',
+            'VkDebugReportCallbackEXT',
+            'VkDebugUtilsMessengerEXT']
+        if obj_type in parent_exception_list:
+             parent_vuid = 'kVUIDUndefined'
+        else:
+            # If no parent VUID for this member, look for a commonparent VUID
+            if parent_vuid == 'kVUIDUndefined':
+                parent_vuid = self.GetVuid(parent_name, 'commonparent')
 
+        if obj_count is not None:
             pre_call_code += '%sif (%s%s) {\n' % (indent, prefix, obj_name)
             indent = self.incIndent(indent)
             pre_call_code += '%sfor (uint32_t %s = 0; %s < %s; ++%s) {\n' % (indent, index, index, obj_count, index)
@@ -789,10 +832,17 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             if member.iscreate and first_level_param and member == members[-1]:
                 continue
             if member.type in self.handle_types:
-                count_name = member.len
-                if (count_name is not None):
+                if member.len:
                     count_name = '%s%s' % (prefix, member.len)
-                null_allowed = member.isoptional
+                    # isoptional may be a list for array types: [the array, the array elements]
+                    if type(member.isoptional) == list:
+                        null_allowed = member.isoptional[1]
+                    else:
+                        # Default to false if a value is not provided for the array elements
+                        null_allowed = False
+                else:
+                    count_name = None
+                    null_allowed = member.isoptional
                 tmp_pre = self.outputObjects(member.type, member.name, count_name, prefix, index, indent, disp_name, parent_name, str(null_allowed).lower(), first_level_param)
                 pre_code += tmp_pre
             # Handle Structs that contain objects at some level
@@ -883,19 +933,23 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
         struct_member_dict = dict(self.structMembers)
 
         # Set command invariant information needed at a per member level in validate...
-        is_create_command = any(filter(lambda pat: pat in cmdname, ('Create', 'Allocate', 'Enumerate', 'RegisterDeviceEvent', 'RegisterDisplayEvent')))
+        is_create_command = any(filter(lambda pat: pat in cmdname, ('Create', 'Allocate', 'Enumerate', 'RegisterDeviceEvent', 'RegisterDisplayEvent', 'AcquirePerformanceConfigurationINTEL')))
         last_member_is_pointer = len(members) and self.paramIsPointer(members[-1])
         iscreate = is_create_command or ('vkGet' in cmdname and last_member_is_pointer)
-        isdestroy = any([destroy_txt in cmdname for destroy_txt in ['Destroy', 'Free']])
+        isdestroy = any([destroy_txt in cmdname for destroy_txt in ['Destroy', 'Free', 'ReleasePerformanceConfigurationINTEL']])
 
         # Generate member info
         membersInfo = []
         allocator = 'nullptr'
+
         for member in members:
             # Get type and name of member
             info = self.getTypeNameTuple(member)
             type = info[0]
             name = info[1]
+            # Skip fake parameters
+            if type == '' or name == '':
+                continue
             cdecl = self.makeCParamDecl(member, 0)
             # Check for parameter name in lens set
             iscount = True if name in lens else False
@@ -937,7 +991,6 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             manual = False
             if cmdname in self.no_autogen_list:
                 manual = True
-
             # Generate object handling code
             (pre_call_validate, pre_call_record, post_call_record) = self.generate_wrapping_code(cmdinfo.elem)
 
@@ -965,19 +1018,22 @@ class ObjectTrackerOutputGenerator(OutputGenerator):
             result_type = cmdinfo.elem.find('proto/type')
 
             if 'object_tracker.h' in self.genOpts.filename:
+                decl_terminator = ';'
+                if 'ValidationCache' not in cmdname:
+                    decl_terminator = ' override;'
                 # Output PreCallValidateAPI prototype if necessary
                 if pre_call_validate:
-                    pre_cv_func_decl = 'bool PreCallValidate' + func_decl_template + ' const;'
+                    pre_cv_func_decl = 'bool PreCallValidate' + func_decl_template + ' const' + decl_terminator
                     self.appendSection('command', pre_cv_func_decl)
 
                 # Output PreCallRecordAPI prototype if necessary
                 if pre_call_record:
-                    pre_cr_func_decl = 'void PreCallRecord' + func_decl_template + ';'
+                    pre_cr_func_decl = 'void PreCallRecord' + func_decl_template + decl_terminator
                     self.appendSection('command', pre_cr_func_decl)
 
                 # Output PosCallRecordAPI prototype if necessary
                 if post_call_record:
-                    post_cr_func_decl = 'void PostCallRecord' + func_decl_template + ';'
+                    post_cr_func_decl = 'void PostCallRecord' + func_decl_template + decl_terminator
                     if result_type.text == 'VkResult':
                         post_cr_func_decl = post_cr_func_decl.replace(')', ',\n    VkResult                                    result)')
                     elif result_type.text == 'VkDeviceAddress':

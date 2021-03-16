@@ -4,10 +4,10 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,16 +37,16 @@
 // Object Type enum for validation layer internal object handling
 typedef enum VulkanObjectType {
     kVulkanObjectTypeUnknown = 0,
-    kVulkanObjectTypeInstance = 1,
-    kVulkanObjectTypePhysicalDevice = 2,
-    kVulkanObjectTypeDevice = 3,
-    kVulkanObjectTypeQueue = 4,
-    kVulkanObjectTypeSemaphore = 5,
-    kVulkanObjectTypeCommandBuffer = 6,
-    kVulkanObjectTypeFence = 7,
-    kVulkanObjectTypeDeviceMemory = 8,
-    kVulkanObjectTypeBuffer = 9,
-    kVulkanObjectTypeImage = 10,
+    kVulkanObjectTypeBuffer = 1,
+    kVulkanObjectTypeImage = 2,
+    kVulkanObjectTypeInstance = 3,
+    kVulkanObjectTypePhysicalDevice = 4,
+    kVulkanObjectTypeDevice = 5,
+    kVulkanObjectTypeQueue = 6,
+    kVulkanObjectTypeSemaphore = 7,
+    kVulkanObjectTypeCommandBuffer = 8,
+    kVulkanObjectTypeFence = 9,
+    kVulkanObjectTypeDeviceMemory = 10,
     kVulkanObjectTypeEvent = 11,
     kVulkanObjectTypeQueryPool = 12,
     kVulkanObjectTypeBufferView = 13,
@@ -54,12 +54,12 @@ typedef enum VulkanObjectType {
     kVulkanObjectTypeShaderModule = 15,
     kVulkanObjectTypePipelineCache = 16,
     kVulkanObjectTypePipelineLayout = 17,
-    kVulkanObjectTypeRenderPass = 18,
-    kVulkanObjectTypePipeline = 19,
+    kVulkanObjectTypePipeline = 18,
+    kVulkanObjectTypeRenderPass = 19,
     kVulkanObjectTypeDescriptorSetLayout = 20,
     kVulkanObjectTypeSampler = 21,
-    kVulkanObjectTypeDescriptorPool = 22,
-    kVulkanObjectTypeDescriptorSet = 23,
+    kVulkanObjectTypeDescriptorSet = 22,
+    kVulkanObjectTypeDescriptorPool = 23,
     kVulkanObjectTypeFramebuffer = 24,
     kVulkanObjectTypeCommandPool = 25,
     kVulkanObjectTypeSamplerYcbcrConversion = 26,
@@ -72,19 +72,22 @@ typedef enum VulkanObjectType {
     kVulkanObjectTypeDebugReportCallbackEXT = 33,
     kVulkanObjectTypeDebugUtilsMessengerEXT = 34,
     kVulkanObjectTypeValidationCacheEXT = 35,
-    kVulkanObjectTypeAccelerationStructureKHR = 36,
+    kVulkanObjectTypeAccelerationStructureNV = 36,
     kVulkanObjectTypePerformanceConfigurationINTEL = 37,
     kVulkanObjectTypeIndirectCommandsLayoutNV = 38,
-    kVulkanObjectTypeMax = 39,
+    kVulkanObjectTypePrivateDataSlotEXT = 39,
+    kVulkanObjectTypeAccelerationStructureKHR = 40,
+    kVulkanObjectTypeMax = 41,
     // Aliases for backwards compatibilty of "promoted" types
     kVulkanObjectTypeDescriptorUpdateTemplateKHR = kVulkanObjectTypeDescriptorUpdateTemplate,
     kVulkanObjectTypeSamplerYcbcrConversionKHR = kVulkanObjectTypeSamplerYcbcrConversion,
-    kVulkanObjectTypeAccelerationStructureNV = kVulkanObjectTypeAccelerationStructureKHR,
 } VulkanObjectType;
 
 // Array of object name strings for OBJECT_TYPE enum conversion
 static const char * const object_string[kVulkanObjectTypeMax] = {
     "VkNonDispatchableHandle",
+    "VkBuffer",
+    "VkImage",
     "VkInstance",
     "VkPhysicalDevice",
     "VkDevice",
@@ -93,8 +96,6 @@ static const char * const object_string[kVulkanObjectTypeMax] = {
     "VkCommandBuffer",
     "VkFence",
     "VkDeviceMemory",
-    "VkBuffer",
-    "VkImage",
     "VkEvent",
     "VkQueryPool",
     "VkBufferView",
@@ -102,12 +103,12 @@ static const char * const object_string[kVulkanObjectTypeMax] = {
     "VkShaderModule",
     "VkPipelineCache",
     "VkPipelineLayout",
-    "VkRenderPass",
     "VkPipeline",
+    "VkRenderPass",
     "VkDescriptorSetLayout",
     "VkSampler",
-    "VkDescriptorPool",
     "VkDescriptorSet",
+    "VkDescriptorPool",
     "VkFramebuffer",
     "VkCommandPool",
     "VkSamplerYcbcrConversion",
@@ -120,14 +121,18 @@ static const char * const object_string[kVulkanObjectTypeMax] = {
     "VkDebugReportCallbackEXT",
     "VkDebugUtilsMessengerEXT",
     "VkValidationCacheEXT",
-    "VkAccelerationStructureKHR",
+    "VkAccelerationStructureNV",
     "VkPerformanceConfigurationINTEL",
     "VkIndirectCommandsLayoutNV",
+    "VkPrivateDataSlotEXT",
+    "VkAccelerationStructureKHR",
 };
 
 // Helper array to get Vulkan VK_EXT_debug_report object type enum from the internal layers version
 const VkDebugReportObjectTypeEXT get_debug_report_enum[] = {
     VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT, // kVulkanObjectTypeUnknown
+    VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT,   // kVulkanObjectTypeBuffer
+    VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT,   // kVulkanObjectTypeImage
     VK_DEBUG_REPORT_OBJECT_TYPE_INSTANCE_EXT,   // kVulkanObjectTypeInstance
     VK_DEBUG_REPORT_OBJECT_TYPE_PHYSICAL_DEVICE_EXT,   // kVulkanObjectTypePhysicalDevice
     VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_EXT,   // kVulkanObjectTypeDevice
@@ -136,8 +141,6 @@ const VkDebugReportObjectTypeEXT get_debug_report_enum[] = {
     VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT,   // kVulkanObjectTypeCommandBuffer
     VK_DEBUG_REPORT_OBJECT_TYPE_FENCE_EXT,   // kVulkanObjectTypeFence
     VK_DEBUG_REPORT_OBJECT_TYPE_DEVICE_MEMORY_EXT,   // kVulkanObjectTypeDeviceMemory
-    VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT,   // kVulkanObjectTypeBuffer
-    VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT,   // kVulkanObjectTypeImage
     VK_DEBUG_REPORT_OBJECT_TYPE_EVENT_EXT,   // kVulkanObjectTypeEvent
     VK_DEBUG_REPORT_OBJECT_TYPE_QUERY_POOL_EXT,   // kVulkanObjectTypeQueryPool
     VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_VIEW_EXT,   // kVulkanObjectTypeBufferView
@@ -145,12 +148,12 @@ const VkDebugReportObjectTypeEXT get_debug_report_enum[] = {
     VK_DEBUG_REPORT_OBJECT_TYPE_SHADER_MODULE_EXT,   // kVulkanObjectTypeShaderModule
     VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_CACHE_EXT,   // kVulkanObjectTypePipelineCache
     VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_LAYOUT_EXT,   // kVulkanObjectTypePipelineLayout
-    VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT,   // kVulkanObjectTypeRenderPass
     VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT,   // kVulkanObjectTypePipeline
+    VK_DEBUG_REPORT_OBJECT_TYPE_RENDER_PASS_EXT,   // kVulkanObjectTypeRenderPass
     VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT_EXT,   // kVulkanObjectTypeDescriptorSetLayout
     VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT,   // kVulkanObjectTypeSampler
-    VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT,   // kVulkanObjectTypeDescriptorPool
     VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_SET_EXT,   // kVulkanObjectTypeDescriptorSet
+    VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT,   // kVulkanObjectTypeDescriptorPool
     VK_DEBUG_REPORT_OBJECT_TYPE_FRAMEBUFFER_EXT,   // kVulkanObjectTypeFramebuffer
     VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT,   // kVulkanObjectTypeCommandPool
     VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT,   // kVulkanObjectTypeSamplerYcbcrConversion
@@ -159,22 +162,22 @@ const VkDebugReportObjectTypeEXT get_debug_report_enum[] = {
     VK_DEBUG_REPORT_OBJECT_TYPE_SWAPCHAIN_KHR_EXT,   // kVulkanObjectTypeSwapchainKHR
     VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_KHR_EXT,   // kVulkanObjectTypeDisplayKHR
     VK_DEBUG_REPORT_OBJECT_TYPE_DISPLAY_MODE_KHR_EXT,   // kVulkanObjectTypeDisplayModeKHR
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,   // kVulkanObjectTypeDeferredOperationKHR
-#else
-    VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,   // kVulkanObjectTypeDeferredOperationKHR
-#endif
     VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT,   // kVulkanObjectTypeDebugReportCallbackEXT
     VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,   // kVulkanObjectTypeDebugUtilsMessengerEXT
     VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT,   // kVulkanObjectTypeValidationCacheEXT
-    VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT,   // kVulkanObjectTypeAccelerationStructureKHR
+    VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT,   // kVulkanObjectTypeAccelerationStructureNV
     VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,   // kVulkanObjectTypePerformanceConfigurationINTEL
     VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,   // kVulkanObjectTypeIndirectCommandsLayoutNV
+    VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,   // kVulkanObjectTypePrivateDataSlotEXT
+    VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT,   // kVulkanObjectTypeAccelerationStructureKHR
 };
 
 // Helper function to get Official Vulkan VkObjectType enum from the internal layers version
 static inline VkObjectType ConvertVulkanObjectToCoreObject(VulkanObjectType internal_type) {
     switch (internal_type) {
+        case kVulkanObjectTypeBuffer: return VK_OBJECT_TYPE_BUFFER;
+        case kVulkanObjectTypeImage: return VK_OBJECT_TYPE_IMAGE;
         case kVulkanObjectTypeInstance: return VK_OBJECT_TYPE_INSTANCE;
         case kVulkanObjectTypePhysicalDevice: return VK_OBJECT_TYPE_PHYSICAL_DEVICE;
         case kVulkanObjectTypeDevice: return VK_OBJECT_TYPE_DEVICE;
@@ -183,8 +186,6 @@ static inline VkObjectType ConvertVulkanObjectToCoreObject(VulkanObjectType inte
         case kVulkanObjectTypeCommandBuffer: return VK_OBJECT_TYPE_COMMAND_BUFFER;
         case kVulkanObjectTypeFence: return VK_OBJECT_TYPE_FENCE;
         case kVulkanObjectTypeDeviceMemory: return VK_OBJECT_TYPE_DEVICE_MEMORY;
-        case kVulkanObjectTypeBuffer: return VK_OBJECT_TYPE_BUFFER;
-        case kVulkanObjectTypeImage: return VK_OBJECT_TYPE_IMAGE;
         case kVulkanObjectTypeEvent: return VK_OBJECT_TYPE_EVENT;
         case kVulkanObjectTypeQueryPool: return VK_OBJECT_TYPE_QUERY_POOL;
         case kVulkanObjectTypeBufferView: return VK_OBJECT_TYPE_BUFFER_VIEW;
@@ -192,12 +193,12 @@ static inline VkObjectType ConvertVulkanObjectToCoreObject(VulkanObjectType inte
         case kVulkanObjectTypeShaderModule: return VK_OBJECT_TYPE_SHADER_MODULE;
         case kVulkanObjectTypePipelineCache: return VK_OBJECT_TYPE_PIPELINE_CACHE;
         case kVulkanObjectTypePipelineLayout: return VK_OBJECT_TYPE_PIPELINE_LAYOUT;
-        case kVulkanObjectTypeRenderPass: return VK_OBJECT_TYPE_RENDER_PASS;
         case kVulkanObjectTypePipeline: return VK_OBJECT_TYPE_PIPELINE;
+        case kVulkanObjectTypeRenderPass: return VK_OBJECT_TYPE_RENDER_PASS;
         case kVulkanObjectTypeDescriptorSetLayout: return VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
         case kVulkanObjectTypeSampler: return VK_OBJECT_TYPE_SAMPLER;
-        case kVulkanObjectTypeDescriptorPool: return VK_OBJECT_TYPE_DESCRIPTOR_POOL;
         case kVulkanObjectTypeDescriptorSet: return VK_OBJECT_TYPE_DESCRIPTOR_SET;
+        case kVulkanObjectTypeDescriptorPool: return VK_OBJECT_TYPE_DESCRIPTOR_POOL;
         case kVulkanObjectTypeFramebuffer: return VK_OBJECT_TYPE_FRAMEBUFFER;
         case kVulkanObjectTypeCommandPool: return VK_OBJECT_TYPE_COMMAND_POOL;
         case kVulkanObjectTypeSamplerYcbcrConversion: return VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION;
@@ -210,9 +211,11 @@ static inline VkObjectType ConvertVulkanObjectToCoreObject(VulkanObjectType inte
         case kVulkanObjectTypeDebugReportCallbackEXT: return VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT;
         case kVulkanObjectTypeDebugUtilsMessengerEXT: return VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT;
         case kVulkanObjectTypeValidationCacheEXT: return VK_OBJECT_TYPE_VALIDATION_CACHE_EXT;
-        case kVulkanObjectTypeAccelerationStructureKHR: return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR;
+        case kVulkanObjectTypeAccelerationStructureNV: return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV;
         case kVulkanObjectTypePerformanceConfigurationINTEL: return VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL;
         case kVulkanObjectTypeIndirectCommandsLayoutNV: return VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV;
+        case kVulkanObjectTypePrivateDataSlotEXT: return VK_OBJECT_TYPE_PRIVATE_DATA_SLOT_EXT;
+        case kVulkanObjectTypeAccelerationStructureKHR: return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR;
         default: return VK_OBJECT_TYPE_UNKNOWN;
     }
 };
@@ -220,6 +223,8 @@ static inline VkObjectType ConvertVulkanObjectToCoreObject(VulkanObjectType inte
 // Helper function to get internal layers object ids from the official Vulkan VkObjectType enum
 static inline VulkanObjectType ConvertCoreObjectToVulkanObject(VkObjectType vulkan_object_type) {
     switch (vulkan_object_type) {
+        case VK_OBJECT_TYPE_BUFFER: return kVulkanObjectTypeBuffer;
+        case VK_OBJECT_TYPE_IMAGE: return kVulkanObjectTypeImage;
         case VK_OBJECT_TYPE_INSTANCE: return kVulkanObjectTypeInstance;
         case VK_OBJECT_TYPE_PHYSICAL_DEVICE: return kVulkanObjectTypePhysicalDevice;
         case VK_OBJECT_TYPE_DEVICE: return kVulkanObjectTypeDevice;
@@ -228,8 +233,6 @@ static inline VulkanObjectType ConvertCoreObjectToVulkanObject(VkObjectType vulk
         case VK_OBJECT_TYPE_COMMAND_BUFFER: return kVulkanObjectTypeCommandBuffer;
         case VK_OBJECT_TYPE_FENCE: return kVulkanObjectTypeFence;
         case VK_OBJECT_TYPE_DEVICE_MEMORY: return kVulkanObjectTypeDeviceMemory;
-        case VK_OBJECT_TYPE_BUFFER: return kVulkanObjectTypeBuffer;
-        case VK_OBJECT_TYPE_IMAGE: return kVulkanObjectTypeImage;
         case VK_OBJECT_TYPE_EVENT: return kVulkanObjectTypeEvent;
         case VK_OBJECT_TYPE_QUERY_POOL: return kVulkanObjectTypeQueryPool;
         case VK_OBJECT_TYPE_BUFFER_VIEW: return kVulkanObjectTypeBufferView;
@@ -237,12 +240,12 @@ static inline VulkanObjectType ConvertCoreObjectToVulkanObject(VkObjectType vulk
         case VK_OBJECT_TYPE_SHADER_MODULE: return kVulkanObjectTypeShaderModule;
         case VK_OBJECT_TYPE_PIPELINE_CACHE: return kVulkanObjectTypePipelineCache;
         case VK_OBJECT_TYPE_PIPELINE_LAYOUT: return kVulkanObjectTypePipelineLayout;
-        case VK_OBJECT_TYPE_RENDER_PASS: return kVulkanObjectTypeRenderPass;
         case VK_OBJECT_TYPE_PIPELINE: return kVulkanObjectTypePipeline;
+        case VK_OBJECT_TYPE_RENDER_PASS: return kVulkanObjectTypeRenderPass;
         case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT: return kVulkanObjectTypeDescriptorSetLayout;
         case VK_OBJECT_TYPE_SAMPLER: return kVulkanObjectTypeSampler;
-        case VK_OBJECT_TYPE_DESCRIPTOR_POOL: return kVulkanObjectTypeDescriptorPool;
         case VK_OBJECT_TYPE_DESCRIPTOR_SET: return kVulkanObjectTypeDescriptorSet;
+        case VK_OBJECT_TYPE_DESCRIPTOR_POOL: return kVulkanObjectTypeDescriptorPool;
         case VK_OBJECT_TYPE_FRAMEBUFFER: return kVulkanObjectTypeFramebuffer;
         case VK_OBJECT_TYPE_COMMAND_POOL: return kVulkanObjectTypeCommandPool;
         case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION: return kVulkanObjectTypeSamplerYcbcrConversion;
@@ -255,9 +258,11 @@ static inline VulkanObjectType ConvertCoreObjectToVulkanObject(VkObjectType vulk
         case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT: return kVulkanObjectTypeDebugReportCallbackEXT;
         case VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT: return kVulkanObjectTypeDebugUtilsMessengerEXT;
         case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT: return kVulkanObjectTypeValidationCacheEXT;
-        case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR: return kVulkanObjectTypeAccelerationStructureKHR;
+        case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV: return kVulkanObjectTypeAccelerationStructureNV;
         case VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL: return kVulkanObjectTypePerformanceConfigurationINTEL;
         case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV: return kVulkanObjectTypeIndirectCommandsLayoutNV;
+        case VK_OBJECT_TYPE_PRIVATE_DATA_SLOT_EXT: return kVulkanObjectTypePrivateDataSlotEXT;
+        case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR: return kVulkanObjectTypeAccelerationStructureKHR;
         default: return kVulkanObjectTypeUnknown;
     }
 };
@@ -299,6 +304,7 @@ static inline VkObjectType convertDebugReportObjectToCoreObject(VkDebugReportObj
         case VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION_EXT: return VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION;
         case VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE_EXT: return VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE;
         case VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT: return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR;
+        case VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT: return VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV;
         default: return VK_OBJECT_TYPE_UNKNOWN;
     }
 }
@@ -340,6 +346,7 @@ static inline VkDebugReportObjectTypeEXT convertCoreObjectToDebugReportObject(Vk
         case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT: return VK_DEBUG_REPORT_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT_EXT;
         case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR: return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR_EXT;
         case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT: return VK_DEBUG_REPORT_OBJECT_TYPE_VALIDATION_CACHE_EXT_EXT;
+        case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV: return VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT;
         default: return VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
     }
 }
@@ -434,6 +441,17 @@ template <> struct VkHandleInfo<VkAccelerationStructureKHR> {
 template <> struct VulkanObjectTypeInfo<kVulkanObjectTypeAccelerationStructureKHR> {
     typedef VkAccelerationStructureKHR Type;
 };
+template <> struct VkHandleInfo<VkAccelerationStructureNV> {
+    static const VulkanObjectType kVulkanObjectType = kVulkanObjectTypeAccelerationStructureNV;
+    static const VkDebugReportObjectTypeEXT kDebugReportObjectType = VK_DEBUG_REPORT_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV_EXT;
+    static const VkObjectType kVkObjectType = VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV;
+    static const char* Typename() {
+        return "VkAccelerationStructureNV";
+    }
+};
+template <> struct VulkanObjectTypeInfo<kVulkanObjectTypeAccelerationStructureNV> {
+    typedef VkAccelerationStructureNV Type;
+};
 template <> struct VkHandleInfo<VkBuffer> {
     static const VulkanObjectType kVulkanObjectType = kVulkanObjectTypeBuffer;
     static const VkDebugReportObjectTypeEXT kDebugReportObjectType = VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT;
@@ -489,7 +507,6 @@ template <> struct VkHandleInfo<VkDebugUtilsMessengerEXT> {
 template <> struct VulkanObjectTypeInfo<kVulkanObjectTypeDebugUtilsMessengerEXT> {
     typedef VkDebugUtilsMessengerEXT Type;
 };
-#ifdef VK_ENABLE_BETA_EXTENSIONS
 template <> struct VkHandleInfo<VkDeferredOperationKHR> {
     static const VulkanObjectType kVulkanObjectType = kVulkanObjectTypeDeferredOperationKHR;
     static const VkDebugReportObjectTypeEXT kDebugReportObjectType = VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
@@ -501,7 +518,6 @@ template <> struct VkHandleInfo<VkDeferredOperationKHR> {
 template <> struct VulkanObjectTypeInfo<kVulkanObjectTypeDeferredOperationKHR> {
     typedef VkDeferredOperationKHR Type;
 };
-#endif
 template <> struct VkHandleInfo<VkDescriptorPool> {
     static const VulkanObjectType kVulkanObjectType = kVulkanObjectTypeDescriptorPool;
     static const VkDebugReportObjectTypeEXT kDebugReportObjectType = VK_DEBUG_REPORT_OBJECT_TYPE_DESCRIPTOR_POOL_EXT;
@@ -688,6 +704,17 @@ template <> struct VkHandleInfo<VkPipelineLayout> {
 };
 template <> struct VulkanObjectTypeInfo<kVulkanObjectTypePipelineLayout> {
     typedef VkPipelineLayout Type;
+};
+template <> struct VkHandleInfo<VkPrivateDataSlotEXT> {
+    static const VulkanObjectType kVulkanObjectType = kVulkanObjectTypePrivateDataSlotEXT;
+    static const VkDebugReportObjectTypeEXT kDebugReportObjectType = VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT;
+    static const VkObjectType kVkObjectType = VK_OBJECT_TYPE_PRIVATE_DATA_SLOT_EXT;
+    static const char* Typename() {
+        return "VkPrivateDataSlotEXT";
+    }
+};
+template <> struct VulkanObjectTypeInfo<kVulkanObjectTypePrivateDataSlotEXT> {
+    typedef VkPrivateDataSlotEXT Type;
 };
 template <> struct VkHandleInfo<VkQueryPool> {
     static const VulkanObjectType kVulkanObjectType = kVulkanObjectTypeQueryPool;

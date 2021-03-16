@@ -2,9 +2,9 @@
 // See layer_dispatch_table_generator.py for modifications
 
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -154,6 +154,9 @@ typedef struct VkLayerInstanceDispatchTable_ {
     PFN_vkGetDisplayModeProperties2KHR GetDisplayModeProperties2KHR;
     PFN_vkGetDisplayPlaneCapabilities2KHR GetDisplayPlaneCapabilities2KHR;
 
+    // ---- VK_KHR_fragment_shading_rate extension commands
+    PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR GetPhysicalDeviceFragmentShadingRatesKHR;
+
     // ---- VK_EXT_debug_report extension commands
     PFN_vkCreateDebugReportCallbackEXT CreateDebugReportCallbackEXT;
     PFN_vkDestroyDebugReportCallbackEXT DestroyDebugReportCallbackEXT;
@@ -233,6 +236,30 @@ typedef struct VkLayerInstanceDispatchTable_ {
 
     // ---- VK_EXT_headless_surface extension commands
     PFN_vkCreateHeadlessSurfaceEXT CreateHeadlessSurfaceEXT;
+
+    // ---- VK_NV_acquire_winrt_display extension commands
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    PFN_vkAcquireWinrtDisplayNV AcquireWinrtDisplayNV;
+#endif // VK_USE_PLATFORM_WIN32_KHR
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+    PFN_vkGetWinrtDisplayNV GetWinrtDisplayNV;
+#endif // VK_USE_PLATFORM_WIN32_KHR
+
+    // ---- VK_EXT_directfb_surface extension commands
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    PFN_vkCreateDirectFBSurfaceEXT CreateDirectFBSurfaceEXT;
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+    PFN_vkGetPhysicalDeviceDirectFBPresentationSupportEXT GetPhysicalDeviceDirectFBPresentationSupportEXT;
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+
+    // ---- VK_QNX_screen_surface extension commands
+#ifdef VK_USE_PLATFORM_SCREEN_QNX
+    PFN_vkCreateScreenSurfaceQNX CreateScreenSurfaceQNX;
+#endif // VK_USE_PLATFORM_SCREEN_QNX
+#ifdef VK_USE_PLATFORM_SCREEN_QNX
+    PFN_vkGetPhysicalDeviceScreenPresentationSupportQNX GetPhysicalDeviceScreenPresentationSupportQNX;
+#endif // VK_USE_PLATFORM_SCREEN_QNX
 } VkLayerInstanceDispatchTable;
 
 // Device function pointer dispatch table
@@ -498,32 +525,43 @@ typedef struct VkLayerDispatchTable_ {
     PFN_vkWaitSemaphoresKHR WaitSemaphoresKHR;
     PFN_vkSignalSemaphoreKHR SignalSemaphoreKHR;
 
+    // ---- VK_KHR_fragment_shading_rate extension commands
+    PFN_vkCmdSetFragmentShadingRateKHR CmdSetFragmentShadingRateKHR;
+
     // ---- VK_KHR_buffer_device_address extension commands
     PFN_vkGetBufferDeviceAddressKHR GetBufferDeviceAddressKHR;
     PFN_vkGetBufferOpaqueCaptureAddressKHR GetBufferOpaqueCaptureAddressKHR;
     PFN_vkGetDeviceMemoryOpaqueCaptureAddressKHR GetDeviceMemoryOpaqueCaptureAddressKHR;
 
     // ---- VK_KHR_deferred_host_operations extension commands
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkCreateDeferredOperationKHR CreateDeferredOperationKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkDestroyDeferredOperationKHR DestroyDeferredOperationKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkGetDeferredOperationMaxConcurrencyKHR GetDeferredOperationMaxConcurrencyKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkGetDeferredOperationResultKHR GetDeferredOperationResultKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkDeferredOperationJoinKHR DeferredOperationJoinKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
 
     // ---- VK_KHR_pipeline_executable_properties extension commands
     PFN_vkGetPipelineExecutablePropertiesKHR GetPipelineExecutablePropertiesKHR;
     PFN_vkGetPipelineExecutableStatisticsKHR GetPipelineExecutableStatisticsKHR;
     PFN_vkGetPipelineExecutableInternalRepresentationsKHR GetPipelineExecutableInternalRepresentationsKHR;
+
+    // ---- VK_KHR_synchronization2 extension commands
+    PFN_vkCmdSetEvent2KHR CmdSetEvent2KHR;
+    PFN_vkCmdResetEvent2KHR CmdResetEvent2KHR;
+    PFN_vkCmdWaitEvents2KHR CmdWaitEvents2KHR;
+    PFN_vkCmdPipelineBarrier2KHR CmdPipelineBarrier2KHR;
+    PFN_vkCmdWriteTimestamp2KHR CmdWriteTimestamp2KHR;
+    PFN_vkQueueSubmit2KHR QueueSubmit2KHR;
+    PFN_vkCmdWriteBufferMarker2AMD CmdWriteBufferMarker2AMD;
+    PFN_vkGetQueueCheckpointData2NV GetQueueCheckpointData2NV;
+
+    // ---- VK_KHR_copy_commands2 extension commands
+    PFN_vkCmdCopyBuffer2KHR CmdCopyBuffer2KHR;
+    PFN_vkCmdCopyImage2KHR CmdCopyImage2KHR;
+    PFN_vkCmdCopyBufferToImage2KHR CmdCopyBufferToImage2KHR;
+    PFN_vkCmdCopyImageToBuffer2KHR CmdCopyImageToBuffer2KHR;
+    PFN_vkCmdBlitImage2KHR CmdBlitImage2KHR;
+    PFN_vkCmdResolveImage2KHR CmdResolveImage2KHR;
 
     // ---- VK_EXT_debug_marker extension commands
     PFN_vkDebugMarkerSetObjectTagEXT DebugMarkerSetObjectTagEXT;
@@ -616,10 +654,8 @@ typedef struct VkLayerDispatchTable_ {
 
     // ---- VK_NV_ray_tracing extension commands
     PFN_vkCreateAccelerationStructureNV CreateAccelerationStructureNV;
-    PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR;
     PFN_vkDestroyAccelerationStructureNV DestroyAccelerationStructureNV;
     PFN_vkGetAccelerationStructureMemoryRequirementsNV GetAccelerationStructureMemoryRequirementsNV;
-    PFN_vkBindAccelerationStructureMemoryKHR BindAccelerationStructureMemoryKHR;
     PFN_vkBindAccelerationStructureMemoryNV BindAccelerationStructureMemoryNV;
     PFN_vkCmdBuildAccelerationStructureNV CmdBuildAccelerationStructureNV;
     PFN_vkCmdCopyAccelerationStructureNV CmdCopyAccelerationStructureNV;
@@ -628,7 +664,6 @@ typedef struct VkLayerDispatchTable_ {
     PFN_vkGetRayTracingShaderGroupHandlesKHR GetRayTracingShaderGroupHandlesKHR;
     PFN_vkGetRayTracingShaderGroupHandlesNV GetRayTracingShaderGroupHandlesNV;
     PFN_vkGetAccelerationStructureHandleNV GetAccelerationStructureHandleNV;
-    PFN_vkCmdWriteAccelerationStructuresPropertiesKHR CmdWriteAccelerationStructuresPropertiesKHR;
     PFN_vkCmdWriteAccelerationStructuresPropertiesNV CmdWriteAccelerationStructuresPropertiesNV;
     PFN_vkCompileDeferredNV CompileDeferredNV;
 
@@ -687,6 +722,20 @@ typedef struct VkLayerDispatchTable_ {
     // ---- VK_EXT_host_query_reset extension commands
     PFN_vkResetQueryPoolEXT ResetQueryPoolEXT;
 
+    // ---- VK_EXT_extended_dynamic_state extension commands
+    PFN_vkCmdSetCullModeEXT CmdSetCullModeEXT;
+    PFN_vkCmdSetFrontFaceEXT CmdSetFrontFaceEXT;
+    PFN_vkCmdSetPrimitiveTopologyEXT CmdSetPrimitiveTopologyEXT;
+    PFN_vkCmdSetViewportWithCountEXT CmdSetViewportWithCountEXT;
+    PFN_vkCmdSetScissorWithCountEXT CmdSetScissorWithCountEXT;
+    PFN_vkCmdBindVertexBuffers2EXT CmdBindVertexBuffers2EXT;
+    PFN_vkCmdSetDepthTestEnableEXT CmdSetDepthTestEnableEXT;
+    PFN_vkCmdSetDepthWriteEnableEXT CmdSetDepthWriteEnableEXT;
+    PFN_vkCmdSetDepthCompareOpEXT CmdSetDepthCompareOpEXT;
+    PFN_vkCmdSetDepthBoundsTestEnableEXT CmdSetDepthBoundsTestEnableEXT;
+    PFN_vkCmdSetStencilTestEnableEXT CmdSetStencilTestEnableEXT;
+    PFN_vkCmdSetStencilOpEXT CmdSetStencilOpEXT;
+
     // ---- VK_NV_device_generated_commands extension commands
     PFN_vkGetGeneratedCommandsMemoryRequirementsNV GetGeneratedCommandsMemoryRequirementsNV;
     PFN_vkCmdPreprocessGeneratedCommandsNV CmdPreprocessGeneratedCommandsNV;
@@ -695,61 +744,40 @@ typedef struct VkLayerDispatchTable_ {
     PFN_vkCreateIndirectCommandsLayoutNV CreateIndirectCommandsLayoutNV;
     PFN_vkDestroyIndirectCommandsLayoutNV DestroyIndirectCommandsLayoutNV;
 
-    // ---- VK_KHR_ray_tracing extension commands
-#ifdef VK_ENABLE_BETA_EXTENSIONS
+    // ---- VK_EXT_private_data extension commands
+    PFN_vkCreatePrivateDataSlotEXT CreatePrivateDataSlotEXT;
+    PFN_vkDestroyPrivateDataSlotEXT DestroyPrivateDataSlotEXT;
+    PFN_vkSetPrivateDataEXT SetPrivateDataEXT;
+    PFN_vkGetPrivateDataEXT GetPrivateDataEXT;
+
+    // ---- VK_NV_fragment_shading_rate_enums extension commands
+    PFN_vkCmdSetFragmentShadingRateEnumNV CmdSetFragmentShadingRateEnumNV;
+
+    // ---- VK_KHR_acceleration_structure extension commands
     PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkGetAccelerationStructureMemoryRequirementsKHR GetAccelerationStructureMemoryRequirementsKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkCmdBuildAccelerationStructureKHR CmdBuildAccelerationStructureKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkCmdBuildAccelerationStructureIndirectKHR CmdBuildAccelerationStructureIndirectKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkBuildAccelerationStructureKHR BuildAccelerationStructureKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
+    PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR;
+    PFN_vkCmdBuildAccelerationStructuresKHR CmdBuildAccelerationStructuresKHR;
+    PFN_vkCmdBuildAccelerationStructuresIndirectKHR CmdBuildAccelerationStructuresIndirectKHR;
+    PFN_vkBuildAccelerationStructuresKHR BuildAccelerationStructuresKHR;
     PFN_vkCopyAccelerationStructureKHR CopyAccelerationStructureKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkCopyAccelerationStructureToMemoryKHR CopyAccelerationStructureToMemoryKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkCopyMemoryToAccelerationStructureKHR CopyMemoryToAccelerationStructureKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkWriteAccelerationStructuresPropertiesKHR WriteAccelerationStructuresPropertiesKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkCmdCopyAccelerationStructureKHR CmdCopyAccelerationStructureKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkCmdCopyAccelerationStructureToMemoryKHR CmdCopyAccelerationStructureToMemoryKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkCmdCopyMemoryToAccelerationStructureKHR CmdCopyMemoryToAccelerationStructureKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkCmdTraceRaysKHR CmdTraceRaysKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkCreateRayTracingPipelinesKHR CreateRayTracingPipelinesKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
     PFN_vkGetAccelerationStructureDeviceAddressKHR GetAccelerationStructureDeviceAddressKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR GetRayTracingCaptureReplayShaderGroupHandlesKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    PFN_vkCmdTraceRaysIndirectKHR CmdTraceRaysIndirectKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
-#ifdef VK_ENABLE_BETA_EXTENSIONS
+    PFN_vkCmdWriteAccelerationStructuresPropertiesKHR CmdWriteAccelerationStructuresPropertiesKHR;
     PFN_vkGetDeviceAccelerationStructureCompatibilityKHR GetDeviceAccelerationStructureCompatibilityKHR;
-#endif // VK_ENABLE_BETA_EXTENSIONS
+    PFN_vkGetAccelerationStructureBuildSizesKHR GetAccelerationStructureBuildSizesKHR;
+
+    // ---- VK_KHR_ray_tracing_pipeline extension commands
+    PFN_vkCmdTraceRaysKHR CmdTraceRaysKHR;
+    PFN_vkCreateRayTracingPipelinesKHR CreateRayTracingPipelinesKHR;
+    PFN_vkGetRayTracingCaptureReplayShaderGroupHandlesKHR GetRayTracingCaptureReplayShaderGroupHandlesKHR;
+    PFN_vkCmdTraceRaysIndirectKHR CmdTraceRaysIndirectKHR;
+    PFN_vkGetRayTracingShaderGroupStackSizeKHR GetRayTracingShaderGroupStackSizeKHR;
+    PFN_vkCmdSetRayTracingPipelineStackSizeKHR CmdSetRayTracingPipelineStackSizeKHR;
 } VkLayerDispatchTable;
 
 

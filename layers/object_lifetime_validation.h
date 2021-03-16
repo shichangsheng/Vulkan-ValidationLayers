@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (C) 2015-2020 Google Inc.
+/* Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (C) 2015-2021 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,8 +62,8 @@ class ObjectLifetimes : public ValidationObject {
     // Override chassis read/write locks for this validation object
     // This override takes a deferred lock. i.e. it is not acquired.
     // This class does its own locking with a shared mutex.
-    virtual read_lock_guard_t read_lock() { return read_lock_guard_t(validation_object_mutex, std::defer_lock); }
-    virtual write_lock_guard_t write_lock() { return write_lock_guard_t(validation_object_mutex, std::defer_lock); }
+    read_lock_guard_t read_lock() override;
+    write_lock_guard_t write_lock() override;
 
     mutable ReadWriteLock object_lifetime_mutex;
     write_lock_guard_t write_shared_lock() { return write_lock_guard_t(object_lifetime_mutex); }
@@ -76,8 +76,18 @@ class ObjectLifetimes : public ValidationObject {
     // Special-case map for swapchain images
     object_map_type swapchainImageMap;
 
+    void *device_createinfo_pnext;
+    bool null_descriptor_enabled;
+
     // Constructor for object lifetime tracking
-    ObjectLifetimes() : num_objects{}, num_total_objects(0) { container_type = LayerObjectTypeObjectTracker; }
+    ObjectLifetimes() : num_objects{}, num_total_objects(0), device_createinfo_pnext(nullptr), null_descriptor_enabled(false) {
+        container_type = LayerObjectTypeObjectTracker;
+    }
+    ~ObjectLifetimes() {
+        if (device_createinfo_pnext) {
+            FreePnextChain(device_createinfo_pnext);
+        }
+    }
 
     template <typename T1>
     void InsertObject(object_map_type &map, T1 object, VulkanObjectType object_type, std::shared_ptr<ObjTrackState> pNode) {
@@ -86,11 +96,11 @@ class ObjectLifetimes : public ValidationObject {
         if (!inserted) {
             // The object should not already exist. If we couldn't add it to the map, there was probably
             // a race condition in the app. Report an error and move on.
-            LogError(object, kVUID_ObjectTracker_Info,
-                     "Couldn't insert %s Object 0x%" PRIxLEAST64
-                     ", already existed. This should not happen and may indicate a "
-                     "race condition in the application.",
-                     object_string[object_type], object_handle);
+            (void)LogError(object, kVUID_ObjectTracker_Info,
+                           "Couldn't insert %s Object 0x%" PRIxLEAST64
+                           ", already existed. This should not happen and may indicate a "
+                           "race condition in the application.",
+                           object_string[object_type], object_handle);
         }
     }
 
@@ -119,7 +129,7 @@ class ObjectLifetimes : public ValidationObject {
                                  const char *wrong_device_code) const;
 
     ObjectLifetimes *GetObjectLifetimeData(std::vector<ValidationObject *> &object_dispatch) const {
-        for (auto layer_object : object_dispatch) {
+        for (auto *layer_object : object_dispatch) {
             if (layer_object->container_type == LayerObjectTypeObjectTracker) {
                 return (reinterpret_cast<ObjectLifetimes *>(layer_object));
             }
@@ -134,8 +144,8 @@ class ObjectLifetimes : public ValidationObject {
             // If object is an image, also look for it in the swapchain image map
             if ((object_type != kVulkanObjectTypeImage) || (swapchainImageMap.find(object_handle) == swapchainImageMap.end())) {
                 // Object not found, look for it in other device object maps
-                for (auto other_device_data : layer_data_map) {
-                    for (auto layer_object_data : other_device_data.second->object_dispatch) {
+                for (const auto &other_device_data : layer_data_map) {
+                    for (auto *layer_object_data : other_device_data.second->object_dispatch) {
                         if (layer_object_data->container_type == LayerObjectTypeObjectTracker) {
                             auto object_lifetime_data = reinterpret_cast<ObjectLifetimes *>(layer_object_data);
                             if (object_lifetime_data && (object_lifetime_data != this)) {
@@ -210,10 +220,10 @@ class ObjectLifetimes : public ValidationObject {
         if (item == object_map[object_type].end()) {
             // We've already checked that the object exists. If we couldn't find and atomically remove it
             // from the map, there must have been a race condition in the app. Report an error and move on.
-            LogError(device, kVUID_ObjectTracker_Info,
-                     "Couldn't destroy %s Object 0x%" PRIxLEAST64
-                     ", not found. This should not happen and may indicate a race condition in the application.",
-                     object_string[object_type], object_handle);
+            (void)LogError(device, kVUID_ObjectTracker_Info,
+                           "Couldn't destroy %s Object 0x%" PRIxLEAST64
+                           ", not found. This should not happen and may indicate a race condition in the application.",
+                           object_string[object_type], object_handle);
 
             return;
         }

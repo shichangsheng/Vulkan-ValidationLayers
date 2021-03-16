@@ -1,8 +1,9 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (c) 2015-2020 Google, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (c) 2015-2021 Google, Inc.
+ * Modifications Copyright (C) 2020-2021 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,7 +90,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
     VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfo = {};
     framebufferAttachmentImageInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO_KHR;
     framebufferAttachmentImageInfo.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-    framebufferAttachmentImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    framebufferAttachmentImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     framebufferAttachmentImageInfo.width = attachmentWidth;
     framebufferAttachmentImageInfo.height = attachmentHeight;
     framebufferAttachmentImageInfo.layerCount = 1;
@@ -119,7 +120,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
     imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageCreateInfo.pNext = &imageFormatListCreateInfo;
     imageCreateInfo.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     imageCreateInfo.extent.width = attachmentWidth;
     imageCreateInfo.extent.height = attachmentHeight;
     imageCreateInfo.extent.depth = 1;
@@ -133,6 +134,12 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
     imageObject.init(&imageCreateInfo);
     VkImage image = imageObject.image();
 
+    // Only use the subset without the TRANSFER bit
+    VkImageViewUsageCreateInfo image_view_usage_create_info = {};
+    image_view_usage_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO;
+    image_view_usage_create_info.pNext = nullptr;
+    image_view_usage_create_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
     VkImageViewCreateInfo imageViewCreateInfo = {};
     imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     imageViewCreateInfo.image = image;
@@ -141,6 +148,13 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
     imageViewCreateInfo.subresourceRange.layerCount = 1;
     imageViewCreateInfo.subresourceRange.levelCount = 1;
     imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    // Has subset of usage flags
+    VkImageView imageViewSubset;
+    imageViewCreateInfo.pNext = &image_view_usage_create_info;
+    vk::CreateImageView(m_device->device(), &imageViewCreateInfo, NULL, &imageViewSubset);
+    imageViewCreateInfo.pNext = nullptr;
+
     VkImageView imageView;
     vk::CreateImageView(m_device->device(), &imageViewCreateInfo, NULL, &imageView);
 
@@ -212,9 +226,18 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     renderPassBeginInfo.framebuffer = framebuffer;
     TestRenderPassBegin(m_errorMonitor, m_device->device(), m_commandBuffer->handle(), &renderPassBeginInfo, rp2Supported,
-                        "VUID-VkRenderPassBeginInfo-framebuffer-03210", "VUID-VkRenderPassBeginInfo-framebuffer-03210");
+                        "VUID-VkRenderPassBeginInfo-framebuffer-04627", "VUID-VkRenderPassBeginInfo-framebuffer-04627");
     vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
-    framebufferAttachmentImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    framebufferAttachmentImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+    // Mismatched usage because VkImageViewUsageCreateInfo restricted to TRANSFER
+    renderPassAttachmentBeginInfo.pAttachments = &imageViewSubset;
+    vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
+    renderPassBeginInfo.framebuffer = framebuffer;
+    TestRenderPassBegin(m_errorMonitor, m_device->device(), m_commandBuffer->handle(), &renderPassBeginInfo, rp2Supported,
+                        "VUID-VkRenderPassBeginInfo-framebuffer-04627", "VUID-VkRenderPassBeginInfo-framebuffer-04627");
+    vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
+    renderPassAttachmentBeginInfo.pAttachments = &imageView;
 
     // Mismatched width
     framebufferAttachmentImageInfo.width += 1;
@@ -322,9 +345,28 @@ TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageViewMismatchTests) {
     renderPassAttachmentBeginInfo.pAttachments = &imageView;
     imageViewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
 
+    imageViewCreateInfo.subresourceRange.baseMipLevel = 1;
+    vk::CreateImageView(m_device->device(), &imageViewCreateInfo, nullptr, &imageView2);
+    renderPassAttachmentBeginInfo.pAttachments = &imageView2;
+    framebufferAttachmentImageInfo.height = framebufferAttachmentImageInfo.height / 2;
+    framebufferAttachmentImageInfo.width = framebufferAttachmentImageInfo.width / 2;
+    vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
+    renderPassBeginInfo.framebuffer = framebuffer;
+    vk::BeginCommandBuffer(m_commandBuffer->handle(), &cmd_begin_info);
+    m_errorMonitor->ExpectSuccess();
+    vk::CmdBeginRenderPass(m_commandBuffer->handle(), &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    m_errorMonitor->VerifyNotFound();
+    vk::ResetCommandBuffer(m_commandBuffer->handle(), 0);
+    vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
+    vk::DestroyImageView(m_device->device(), imageView2, nullptr);
+    renderPassAttachmentBeginInfo.pAttachments = &imageView;
+    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+    framebufferAttachmentImageInfo.height = framebufferAttachmentImageInfo.height * 2;
+    framebufferAttachmentImageInfo.width = framebufferAttachmentImageInfo.width * 2;
+
     vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
-    //    vkDestroyFramebuffer(m_device->device(), framebuffer, nullptr);
     vk::DestroyImageView(m_device->device(), imageView, nullptr);
+    vk::DestroyImageView(m_device->device(), imageViewSubset, nullptr);
 }
 
 TEST_F(VkLayerTest, ImagelessFramebufferFeatureEnableTest) {
@@ -544,7 +586,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
     // Mismatched layer count, multiview disabled
     framebufferCreateInfo.layers = 2;
     const char* mismatchedLayersNoMultiviewVuid =
-        multiviewSupported ? "VUID-VkFramebufferCreateInfo-renderPass-03199" : "VUID-VkFramebufferCreateInfo-flags-03200";
+        multiviewSupported ? "VUID-VkFramebufferCreateInfo-renderPass-04546" : "VUID-VkFramebufferCreateInfo-flags-04547";
     m_errorMonitor->SetDesiredFailureMsg(kErrorBit, mismatchedLayersNoMultiviewVuid);
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
@@ -555,7 +597,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
 
     // Mismatched width
     framebufferCreateInfo.width += 1;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03192");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04541");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
     if (framebuffer != VK_NULL_HANDLE) {
@@ -565,7 +607,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferCreationTests) {
 
     // Mismatched height
     framebufferCreateInfo.height += 1;
-    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-03193");
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04542");
     vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
     m_errorMonitor->VerifyFound();
     if (framebuffer != VK_NULL_HANDLE) {
@@ -988,7 +1030,11 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
 
     uint32_t attachmentWidth = 512;
     uint32_t attachmentHeight = 512;
-    VkFormat attachmentFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
+    VkFormat attachmentFormat = FindSupportedDepthStencilFormat(gpu());
+    if (attachmentFormat == VK_FORMAT_UNDEFINED) {
+        printf("%s Did not find a supported depth stencil format; skipped.\n", kSkipPrefix);
+        return;
+    }
 
     VkAttachmentDescription2KHR attachmentDescriptions[2] = {};
     // Depth/stencil attachment
@@ -1063,6 +1109,7 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     framebufferCreateInfo.layers = 1;
     framebufferCreateInfo.renderPass = renderPass;
     framebufferCreateInfo.attachmentCount = 2;
+    framebufferCreateInfo.pAttachments = nullptr;
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 
     // Color attachment, mismatched layer count
@@ -1096,4 +1143,454 @@ TEST_F(VkLayerTest, ImagelessFramebufferDepthStencilResolveAttachmentTests) {
     framebufferAttachmentImageInfos[1].layerCount = 2;
 
     vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
+}
+
+TEST_F(VkLayerTest, InvalidFragmentShadingRateImagelessFramebufferUsage) {
+    TEST_DESCRIPTION("Specify a fragment shading rate attachment without the correct usage");
+
+    // Enable KHR_fragment_shading_rate and all of its required extensions
+    bool fsr_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if (fsr_extensions) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE2_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    if (fsr_extensions) {
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE2_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    } else {
+        printf("%s requires VK_KHR_fragment_shading_rate.\n", kSkipPrefix);
+        return;
+    }
+
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required device extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
+        return;
+    }
+
+    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
+        (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
+    VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties =
+        LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
+    VkPhysicalDeviceProperties2KHR properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
+    vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+    VkPhysicalDeviceImagelessFramebufferFeatures if_features = LvlInitStruct<VkPhysicalDeviceImagelessFramebufferFeatures>();
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features =
+        LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>(&if_features);
+    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+
+    if (fsr_features.attachmentFragmentShadingRate != VK_TRUE) {
+        printf("%s requires attachmentFragmentShadingRate feature.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    VkAttachmentReference2 attach = {};
+    attach.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    attach.layout = VK_IMAGE_LAYOUT_GENERAL;
+    attach.attachment = 0;
+
+    VkFragmentShadingRateAttachmentInfoKHR fsr_attachment = {};
+    fsr_attachment.sType = VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR;
+    fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
+    fsr_attachment.pFragmentShadingRateAttachment = &attach;
+
+    // Create a renderPass with a single fsr attachment
+    VkSubpassDescription2 subpass = {};
+    subpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
+    subpass.pNext = &fsr_attachment;
+
+    VkAttachmentDescription2 attach_desc = {};
+    attach_desc.format = VK_FORMAT_R8_UINT;
+    attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
+    attach_desc.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkRenderPassCreateInfo2 rpci = {};
+    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = &attach_desc;
+
+    VkRenderPass rp;
+
+    PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
+        (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCreateRenderPass2KHR");
+    VkResult err = vkCreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+    ASSERT_VK_SUCCESS(err);
+
+    VkFormat viewFormat = VK_FORMAT_R8_UINT;
+    VkFramebufferAttachmentImageInfo fbai_info = {};
+    fbai_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO;
+    fbai_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    fbai_info.width = 1;
+    fbai_info.height = 1;
+    fbai_info.layerCount = 1;
+    fbai_info.viewFormatCount = 1;
+    fbai_info.pViewFormats = &viewFormat;
+
+    VkFramebufferAttachmentsCreateInfo fba_info = {};
+    fba_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO;
+    fba_info.attachmentImageInfoCount = 1;
+    fba_info.pAttachmentImageInfos = &fbai_info;
+
+    VkFramebufferCreateInfo fb_info = {};
+    fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fb_info.pNext = &fba_info;
+    fb_info.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT;
+    fb_info.renderPass = rp;
+    fb_info.attachmentCount = 1;
+    fb_info.pAttachments = NULL;
+    fb_info.width = fsr_properties.minFragmentShadingRateAttachmentTexelSize.width;
+    fb_info.height = fsr_properties.minFragmentShadingRateAttachmentTexelSize.height;
+    fb_info.layers = 1;
+
+    VkFramebuffer fb;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04549");
+    err = vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
+    m_errorMonitor->VerifyFound();
+    if (err == VK_SUCCESS) {
+        vk::DestroyFramebuffer(m_device->device(), fb, NULL);
+    }
+    vk::DestroyRenderPass(m_device->device(), rp, NULL);
+}
+
+TEST_F(VkLayerTest, InvalidFragmentShadingRateImagelessFramebufferDimensions) {
+    TEST_DESCRIPTION("Specify a fragment shading rate attachment without the correct usage");
+
+    // Enable KHR_fragment_shading_rate and all of its required extensions
+    bool fsr_extensions = InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    if (fsr_extensions) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MAINTENANCE2_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_MULTIVIEW_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+    fsr_extensions = fsr_extensions && DeviceExtensionSupported(gpu(), nullptr, VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    if (fsr_extensions) {
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE1_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE2_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_MULTIVIEW_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME);
+    } else {
+        printf("%s requires VK_KHR_fragment_shading_rate.\n", kSkipPrefix);
+        return;
+    }
+
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required device extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
+        return;
+    }
+
+    PFN_vkGetPhysicalDeviceProperties2KHR vkGetPhysicalDeviceProperties2KHR =
+        (PFN_vkGetPhysicalDeviceProperties2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceProperties2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceProperties2KHR != nullptr);
+    VkPhysicalDeviceFragmentShadingRatePropertiesKHR fsr_properties =
+        LvlInitStruct<VkPhysicalDeviceFragmentShadingRatePropertiesKHR>();
+    VkPhysicalDeviceProperties2KHR properties2 = LvlInitStruct<VkPhysicalDeviceProperties2KHR>(&fsr_properties);
+    vkGetPhysicalDeviceProperties2KHR(gpu(), &properties2);
+
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(), "vkGetPhysicalDeviceFeatures2KHR");
+    ASSERT_TRUE(vkGetPhysicalDeviceFeatures2KHR != nullptr);
+    VkPhysicalDeviceImagelessFramebufferFeatures if_features = LvlInitStruct<VkPhysicalDeviceImagelessFramebufferFeatures>();
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fsr_features =
+        LvlInitStruct<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>(&if_features);
+    VkPhysicalDeviceFeatures2KHR features2 = LvlInitStruct<VkPhysicalDeviceFeatures2KHR>(&fsr_features);
+    vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+
+    if (fsr_features.attachmentFragmentShadingRate != VK_TRUE) {
+        printf("%s requires attachmentFragmentShadingRate feature.\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &features2));
+
+    VkAttachmentReference2 attach = {};
+    attach.sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2;
+    attach.layout = VK_IMAGE_LAYOUT_GENERAL;
+    attach.attachment = 0;
+
+    VkFragmentShadingRateAttachmentInfoKHR fsr_attachment = {};
+    fsr_attachment.sType = VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR;
+    fsr_attachment.shadingRateAttachmentTexelSize = fsr_properties.minFragmentShadingRateAttachmentTexelSize;
+    fsr_attachment.pFragmentShadingRateAttachment = &attach;
+
+    // Create a renderPass with a single fsr attachment
+    VkSubpassDescription2 subpass = {};
+    subpass.sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2;
+    subpass.pNext = &fsr_attachment;
+
+    VkAttachmentDescription2 attach_desc = {};
+    attach_desc.format = VK_FORMAT_R8_UINT;
+    attach_desc.samples = VK_SAMPLE_COUNT_1_BIT;
+    attach_desc.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    attach_desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    VkRenderPassCreateInfo2 rpci = {};
+    rpci.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2;
+    rpci.subpassCount = 1;
+    rpci.pSubpasses = &subpass;
+    rpci.attachmentCount = 1;
+    rpci.pAttachments = &attach_desc;
+
+    VkRenderPass rp;
+
+    PFN_vkCreateRenderPass2KHR vkCreateRenderPass2KHR =
+        (PFN_vkCreateRenderPass2KHR)vk::GetDeviceProcAddr(m_device->device(), "vkCreateRenderPass2KHR");
+    VkResult err = vkCreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+    ASSERT_VK_SUCCESS(err);
+
+    VkFormat viewFormat = VK_FORMAT_R8_UINT;
+    VkFramebufferAttachmentImageInfo fbai_info = {};
+    fbai_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO;
+    fbai_info.usage = VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+    fbai_info.width = 1;
+    fbai_info.height = 1;
+    fbai_info.layerCount = 1;
+    fbai_info.viewFormatCount = 1;
+    fbai_info.pViewFormats = &viewFormat;
+
+    VkFramebufferAttachmentsCreateInfo fba_info = {};
+    fba_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO;
+    fba_info.attachmentImageInfoCount = 1;
+    fba_info.pAttachmentImageInfos = &fbai_info;
+
+    VkFramebufferCreateInfo fb_info = {};
+    fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fb_info.pNext = &fba_info;
+    fb_info.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT;
+    fb_info.renderPass = rp;
+    fb_info.attachmentCount = 1;
+    fb_info.pAttachments = NULL;
+    fb_info.width = fsr_properties.minFragmentShadingRateAttachmentTexelSize.width;
+    fb_info.height = fsr_properties.minFragmentShadingRateAttachmentTexelSize.height;
+    fb_info.layers = 1;
+
+    VkFramebuffer fb;
+
+    fb_info.width = fsr_properties.minFragmentShadingRateAttachmentTexelSize.width * 2;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04543");
+    err = vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
+    m_errorMonitor->VerifyFound();
+    if (err == VK_SUCCESS) {
+        vk::DestroyFramebuffer(m_device->device(), fb, NULL);
+    }
+    fb_info.width = fsr_properties.minFragmentShadingRateAttachmentTexelSize.width;
+
+    fb_info.height = fsr_properties.minFragmentShadingRateAttachmentTexelSize.height * 2;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04544");
+    err = vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
+    m_errorMonitor->VerifyFound();
+    if (err == VK_SUCCESS) {
+        vk::DestroyFramebuffer(m_device->device(), fb, NULL);
+    }
+    fb_info.height = fsr_properties.minFragmentShadingRateAttachmentTexelSize.height;
+
+    fbai_info.layerCount = 2;
+    fb_info.layers = 3;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04545");
+    err = vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
+    m_errorMonitor->VerifyFound();
+    if (err == VK_SUCCESS) {
+        vk::DestroyFramebuffer(m_device->device(), fb, NULL);
+    }
+    fb_info.layers = 1;
+    fbai_info.layerCount = 1;
+
+    vk::DestroyRenderPass(m_device->device(), rp, NULL);
+
+    if (fsr_properties.layeredShadingRateAttachments == VK_TRUE) {
+        subpass.viewMask = 0x4;
+        err = vkCreateRenderPass2KHR(m_device->device(), &rpci, NULL, &rp);
+        ASSERT_VK_SUCCESS(err);
+        subpass.viewMask = 0;
+
+        fbai_info.layerCount = 2;
+        fb_info.renderPass = rp;
+        m_errorMonitor->SetDesiredFailureMsg(kErrorBit, kVUIDUndefined);
+        err = vk::CreateFramebuffer(device(), &fb_info, NULL, &fb);
+        m_errorMonitor->VerifyFound();
+        if (err == VK_SUCCESS) {
+            vk::DestroyFramebuffer(m_device->device(), fb, NULL);
+        }
+        fbai_info.layerCount = 1;
+
+        vk::DestroyRenderPass(m_device->device(), rp, NULL);
+    }
+}
+
+TEST_F(VkLayerTest, ImagelessFramebufferRenderPassBeginImageView3D) {
+    TEST_DESCRIPTION("Misuse of VK_IMAGE_VIEW_TYPE_3D.");
+
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    } else {
+        printf("%s Did not find required device extension %s; skipped.\n", kSkipPrefix,
+               VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitFramework(m_errorMonitor));
+    bool rp2Supported = CheckCreateRenderPass2Support(this, m_device_extension_names);
+
+    if (DeviceExtensionSupported(gpu(), nullptr, VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME)) {
+        m_device_extension_names.push_back(VK_KHR_MAINTENANCE2_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME);
+        m_device_extension_names.push_back(VK_KHR_IMAGELESS_FRAMEBUFFER_EXTENSION_NAME);
+    } else {
+        printf("%s test requires VK_KHR_imageless_framebuffer, not available.  Skipping.\n", kSkipPrefix);
+        return;
+    }
+
+    VkPhysicalDeviceImagelessFramebufferFeaturesKHR physicalDeviceImagelessFramebufferFeatures = {};
+    physicalDeviceImagelessFramebufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR;
+    physicalDeviceImagelessFramebufferFeatures.imagelessFramebuffer = VK_TRUE;
+    VkPhysicalDeviceFeatures2 physicalDeviceFeatures2 = {};
+    physicalDeviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    physicalDeviceFeatures2.pNext = &physicalDeviceImagelessFramebufferFeatures;
+
+    ASSERT_NO_FATAL_FAILURE(InitState(nullptr, &physicalDeviceFeatures2, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT));
+    uint32_t attachmentWidth = 512;
+    uint32_t attachmentHeight = 512;
+    VkFormat attachmentFormats[1] = {VK_FORMAT_R8G8B8A8_UNORM};
+    VkFormat framebufferAttachmentFormats[1] = {VK_FORMAT_R8G8B8A8_UNORM};
+
+    // Create a renderPass with a single attachment
+    VkAttachmentDescription attachmentDescription = {};
+    attachmentDescription.format = attachmentFormats[0];
+    attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
+    attachmentDescription.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
+    VkAttachmentReference attachmentReference = {};
+    attachmentReference.layout = VK_IMAGE_LAYOUT_GENERAL;
+    VkSubpassDescription subpassDescription = {};
+    subpassDescription.colorAttachmentCount = 1;
+    subpassDescription.pColorAttachments = &attachmentReference;
+    VkRenderPassCreateInfo renderPassCreateInfo = {};
+    renderPassCreateInfo.subpassCount = 1;
+    renderPassCreateInfo.pSubpasses = &subpassDescription;
+    renderPassCreateInfo.attachmentCount = 1;
+    renderPassCreateInfo.pAttachments = &attachmentDescription;
+    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    VkRenderPass renderPass;
+    vk::CreateRenderPass(m_device->device(), &renderPassCreateInfo, NULL, &renderPass);
+
+    // Create Attachments
+    VkImageCreateInfo imageCreateInfo = {};
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.pNext = nullptr;
+    imageCreateInfo.flags = 0;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageCreateInfo.extent.width = attachmentWidth;
+    imageCreateInfo.extent.height = attachmentHeight;
+    imageCreateInfo.extent.depth = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_3D;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.format = attachmentFormats[0];
+
+    VkImageObj image3D(m_device);
+    image3D.init(&imageCreateInfo);
+
+    VkImageViewCreateInfo imageViewCreateInfo = {};
+    imageViewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    imageViewCreateInfo.image = image3D.handle();
+    imageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_3D;
+    imageViewCreateInfo.format = attachmentFormats[0];
+    imageViewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    imageViewCreateInfo.subresourceRange.baseMipLevel = 0;
+    imageViewCreateInfo.subresourceRange.levelCount = 1;
+    imageViewCreateInfo.subresourceRange.baseArrayLayer = 0;
+    imageViewCreateInfo.subresourceRange.layerCount = 1;
+    VkImageView imageView3D;
+    vk::CreateImageView(m_device->device(), &imageViewCreateInfo, NULL, &imageView3D);
+
+    VkFramebufferAttachmentImageInfoKHR framebufferAttachmentImageInfo = {};
+    framebufferAttachmentImageInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO_KHR;
+    framebufferAttachmentImageInfo.flags = 0;
+    framebufferAttachmentImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    framebufferAttachmentImageInfo.width = attachmentWidth;
+    framebufferAttachmentImageInfo.height = attachmentHeight;
+    framebufferAttachmentImageInfo.layerCount = 1;
+    framebufferAttachmentImageInfo.viewFormatCount = 1;
+    framebufferAttachmentImageInfo.pViewFormats = framebufferAttachmentFormats;
+    VkFramebufferAttachmentsCreateInfoKHR framebufferAttachmentsCreateInfo = {};
+    framebufferAttachmentsCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENTS_CREATE_INFO_KHR;
+    framebufferAttachmentsCreateInfo.attachmentImageInfoCount = 1;
+    framebufferAttachmentsCreateInfo.pAttachmentImageInfos = &framebufferAttachmentImageInfo;
+
+    VkFramebuffer framebuffer;
+    VkFramebufferCreateInfo framebufferCreateInfo = {};
+    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferCreateInfo.width = attachmentWidth;
+    framebufferCreateInfo.height = attachmentHeight;
+    framebufferCreateInfo.layers = 1;
+    framebufferCreateInfo.attachmentCount = 1;
+    framebufferCreateInfo.renderPass = renderPass;
+
+    // Try to use 3D Image View without imageless flag
+    framebufferCreateInfo.pNext = nullptr;
+    framebufferCreateInfo.flags = 0;
+    framebufferCreateInfo.pAttachments = &imageView3D;
+    m_errorMonitor->SetDesiredFailureMsg(kErrorBit, "VUID-VkFramebufferCreateInfo-flags-04113");
+    vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
+    m_errorMonitor->VerifyFound();
+
+    framebufferCreateInfo.pNext = &framebufferAttachmentsCreateInfo;
+    framebufferCreateInfo.flags = VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR;
+    framebufferCreateInfo.pAttachments = nullptr;
+    m_errorMonitor->ExpectSuccess();
+    vk::CreateFramebuffer(m_device->device(), &framebufferCreateInfo, nullptr, &framebuffer);
+    m_errorMonitor->VerifyNotFound();
+
+    VkRenderPassAttachmentBeginInfoKHR renderPassAttachmentBeginInfo = {};
+    renderPassAttachmentBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR;
+    renderPassAttachmentBeginInfo.pNext = nullptr;
+    renderPassAttachmentBeginInfo.attachmentCount = 1;
+    renderPassAttachmentBeginInfo.pAttachments = &imageView3D;
+    VkRenderPassBeginInfo renderPassBeginInfo = {};
+    renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassBeginInfo.pNext = &renderPassAttachmentBeginInfo;
+    renderPassBeginInfo.renderPass = renderPass;
+    renderPassBeginInfo.renderArea.extent.width = attachmentWidth;
+    renderPassBeginInfo.renderArea.extent.height = attachmentHeight;
+    renderPassBeginInfo.framebuffer = framebuffer;
+
+    // Try to use 3D Image View with imageless flag
+    TestRenderPassBegin(m_errorMonitor, m_device->device(), m_commandBuffer->handle(), &renderPassBeginInfo, rp2Supported,
+                        "VUID-VkRenderPassAttachmentBeginInfo-pAttachments-04114",
+                        "VUID-VkRenderPassAttachmentBeginInfo-pAttachments-04114");
+
+    vk::DestroyRenderPass(m_device->device(), renderPass, nullptr);
+    vk::DestroyFramebuffer(m_device->device(), framebuffer, nullptr);
+    vk::DestroyImageView(m_device->device(), imageView3D, nullptr);
 }

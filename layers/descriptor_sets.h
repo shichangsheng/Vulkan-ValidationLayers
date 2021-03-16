@@ -1,7 +1,7 @@
-/* Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (C) 2015-2020 Google Inc.
+/* Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (C) 2015-2021 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -115,7 +115,7 @@ class DescriptorSetLayoutDef {
     const VkDescriptorSetLayoutBinding *GetBindingInfoFromBinding(const uint32_t binding) const {
         return GetBindingInfoFromIndex(GetIndexFromBinding(binding));
     }
-    const std::vector<VkDescriptorBindingFlagsEXT> &GetBindingFlags() const { return binding_flags_; }
+    const std::vector<VkDescriptorBindingFlags> &GetBindingFlags() const { return binding_flags_; }
     uint32_t GetDescriptorCountFromIndex(const uint32_t) const;
     uint32_t GetDescriptorCountFromBinding(const uint32_t binding) const {
         return GetDescriptorCountFromIndex(GetIndexFromBinding(binding));
@@ -126,21 +126,12 @@ class DescriptorSetLayoutDef {
     VkShaderStageFlags GetStageFlagsFromBinding(const uint32_t binding) const {
         return GetStageFlagsFromIndex(GetIndexFromBinding(binding));
     }
-    VkDescriptorBindingFlagsEXT GetDescriptorBindingFlagsFromIndex(const uint32_t) const;
-    VkDescriptorBindingFlagsEXT GetDescriptorBindingFlagsFromBinding(const uint32_t binding) const {
+    VkDescriptorBindingFlags GetDescriptorBindingFlagsFromIndex(const uint32_t) const;
+    VkDescriptorBindingFlags GetDescriptorBindingFlagsFromBinding(const uint32_t binding) const {
         return GetDescriptorBindingFlagsFromIndex(GetIndexFromBinding(binding));
     }
     VkSampler const *GetImmutableSamplerPtrFromBinding(const uint32_t) const;
     VkSampler const *GetImmutableSamplerPtrFromIndex(const uint32_t) const;
-    // For a given binding and array index, return the corresponding index into the dynamic offset array
-    int32_t GetDynamicOffsetIndexFromBinding(uint32_t binding) const {
-        auto dyn_off = binding_to_dynamic_array_idx_map_.find(binding);
-        if (dyn_off == binding_to_dynamic_array_idx_map_.end()) {
-            assert(0);  // Requesting dyn offset for invalid binding/array idx pair
-            return -1;
-        }
-        return dyn_off->second;
-    }
     // For a particular binding, get the global index range
     //  This call should be guarded by a call to "HasBinding(binding)" to verify that the given binding exists
     const IndexRange &GetGlobalIndexRangeFromBinding(const uint32_t) const;
@@ -162,15 +153,13 @@ class DescriptorSetLayoutDef {
     // used to speed up the various lookups/queries/validations
     VkDescriptorSetLayoutCreateFlags flags_;
     std::vector<safe_VkDescriptorSetLayoutBinding> bindings_;
-    std::vector<VkDescriptorBindingFlagsEXT> binding_flags_;
+    std::vector<VkDescriptorBindingFlags> binding_flags_;
 
     // Convenience data structures for rapid lookup of various descriptor set layout properties
     std::set<uint32_t> non_empty_bindings_;  // Containing non-emtpy bindings in numerical order
     std::unordered_map<uint32_t, uint32_t> binding_to_index_map_;
     // The following map allows an non-iterative lookup of a binding from a global index...
     std::vector<IndexRange> global_index_range_;  // range is exclusive of .end
-    // For a given binding map to associated index in the dynamic offset array
-    std::unordered_map<uint32_t, uint32_t> binding_to_dynamic_array_idx_map_;
 
     uint32_t binding_count_;     // # of bindings in this layout
     uint32_t descriptor_count_;  // total # descriptors in this layout
@@ -228,10 +217,10 @@ class DescriptorSetLayout : public BASE_NODE {
     VkShaderStageFlags GetStageFlagsFromBinding(const uint32_t binding) const {
         return layout_id_->GetStageFlagsFromBinding(binding);
     }
-    VkDescriptorBindingFlagsEXT GetDescriptorBindingFlagsFromIndex(const uint32_t index) const {
+    VkDescriptorBindingFlags GetDescriptorBindingFlagsFromIndex(const uint32_t index) const {
         return layout_id_->GetDescriptorBindingFlagsFromIndex(index);
     }
-    VkDescriptorBindingFlagsEXT GetDescriptorBindingFlagsFromBinding(const uint32_t binding) const {
+    VkDescriptorBindingFlags GetDescriptorBindingFlagsFromBinding(const uint32_t binding) const {
         return layout_id_->GetDescriptorBindingFlagsFromBinding(binding);
     }
     VkSampler const *GetImmutableSamplerPtrFromBinding(const uint32_t binding) const {
@@ -239,10 +228,6 @@ class DescriptorSetLayout : public BASE_NODE {
     }
     VkSampler const *GetImmutableSamplerPtrFromIndex(const uint32_t index) const {
         return layout_id_->GetImmutableSamplerPtrFromIndex(index);
-    }
-    // For a given binding and array index, return the corresponding index into the dynamic offset array
-    int32_t GetDynamicOffsetIndexFromBinding(uint32_t binding) const {
-        return layout_id_->GetDynamicOffsetIndexFromBinding(binding);
     }
     // For a particular binding, get the global index range
     //  This call should be guarded by a call to "HasBinding(binding)" to verify that the given binding exists
@@ -255,7 +240,7 @@ class DescriptorSetLayout : public BASE_NODE {
     uint32_t GetNextValidBinding(const uint32_t binding) const { return layout_id_->GetNextValidBinding(binding); }
     bool IsPushDescriptor() const { return layout_id_->IsPushDescriptor(); }
     bool IsVariableDescriptorCountFromIndex(uint32_t index) const {
-        return !!(GetDescriptorBindingFlagsFromIndex(index) & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT);
+        return !!(GetDescriptorBindingFlagsFromIndex(index) & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT);
     }
     bool IsVariableDescriptorCount(uint32_t binding) const {
         return IsVariableDescriptorCountFromIndex(GetIndexFromBinding(binding));
@@ -283,9 +268,7 @@ class DescriptorSetLayout : public BASE_NODE {
         VkDescriptorType GetType() const { return layout_->GetTypeFromIndex(index_); }
         VkShaderStageFlags GetStageFlags() const { return layout_->GetStageFlagsFromIndex(index_); }
 
-        VkDescriptorBindingFlagsEXT GetDescriptorBindingFlags() const {
-            return layout_->GetDescriptorBindingFlagsFromIndex(index_);
-        }
+        VkDescriptorBindingFlags GetDescriptorBindingFlags() const { return layout_->GetDescriptorBindingFlagsFromIndex(index_); }
 
         bool IsVariableDescriptorCount() const { return layout_->IsVariableDescriptorCountFromIndex(index_); }
 
@@ -293,11 +276,6 @@ class DescriptorSetLayout : public BASE_NODE {
         const IndexRange &GetGlobalIndexRange() const { return layout_->GetGlobalIndexRangeFromIndex(index_); }
         uint32_t GetIndex() const { return index_; }
         bool AtEnd() const { return index_ == layout_->GetBindingCount(); }
-
-        // Return index into dynamic offset array for given binding
-        int32_t GetDynamicOffsetIndex() const {
-            return layout_->GetDynamicOffsetIndexFromBinding(Binding());  //  There is only binding mapped access in layout_
-        }
 
         bool operator==(const ConstBindingIterator &rhs) { return (index_ = rhs.index_) && (layout_ == rhs.layout_); }
 
@@ -384,6 +362,10 @@ bool ValidateDescriptorSetLayoutCreateInfo(const ValidationObject *val_obj, cons
                                            const VkPhysicalDeviceInlineUniformBlockPropertiesEXT *inline_uniform_block_props,
                                            const DeviceExtensions *device_extensions);
 
+inline bool IsDyanmicDescriptor(VkDescriptorType type) {
+    return ((type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) || (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC));
+}
+
 class SamplerDescriptor : public Descriptor {
   public:
     SamplerDescriptor(const ValidationStateTracker *dev_data, const VkSampler *);
@@ -391,12 +373,12 @@ class SamplerDescriptor : public Descriptor {
     void CopyUpdate(const ValidationStateTracker *dev_data, const Descriptor *) override;
     void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *) override;
     virtual bool IsImmutableSampler() const override { return immutable_; };
-    VkSampler GetSampler() const { return sampler_; }
+    VkSampler GetSampler() const { return sampler_state_ ? sampler_state_->sampler : VK_NULL_HANDLE; }
     const SAMPLER_STATE *GetSamplerState() const { return sampler_state_.get(); }
     SAMPLER_STATE *GetSamplerState() { return sampler_state_.get(); }
+    std::shared_ptr<SAMPLER_STATE> GetSharedSamplerState() const { return sampler_state_; }
 
   private:
-    VkSampler sampler_;
     bool immutable_;
     std::shared_ptr<SAMPLER_STATE> sampler_state_;
 };
@@ -408,20 +390,20 @@ class ImageSamplerDescriptor : public Descriptor {
     void CopyUpdate(const ValidationStateTracker *dev_data, const Descriptor *) override;
     void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *) override;
     virtual bool IsImmutableSampler() const override { return immutable_; };
-    VkSampler GetSampler() const { return sampler_; }
-    VkImageView GetImageView() const { return image_view_; }
+    VkSampler GetSampler() const { return sampler_state_ ? sampler_state_->sampler : VK_NULL_HANDLE; }
+    VkImageView GetImageView() const { return image_view_state_ ? image_view_state_->image_view : VK_NULL_HANDLE; }
     const IMAGE_VIEW_STATE *GetImageViewState() const { return image_view_state_.get(); }
     IMAGE_VIEW_STATE *GetImageViewState() { return image_view_state_.get(); }
+    std::shared_ptr<IMAGE_VIEW_STATE> GetSharedImageViewState() const { return image_view_state_; }
     VkImageLayout GetImageLayout() const { return image_layout_; }
     const SAMPLER_STATE *GetSamplerState() const { return sampler_state_.get(); }
     SAMPLER_STATE *GetSamplerState() { return sampler_state_.get(); }
+    std::shared_ptr<SAMPLER_STATE> GetSharedSamplerState() const { return sampler_state_; }
 
   private:
     std::shared_ptr<SAMPLER_STATE> sampler_state_;
-    VkSampler sampler_;
     bool immutable_;
     std::shared_ptr<IMAGE_VIEW_STATE> image_view_state_;
-    VkImageView image_view_;
     VkImageLayout image_layout_;
 };
 
@@ -432,15 +414,15 @@ class ImageDescriptor : public Descriptor {
     void CopyUpdate(const ValidationStateTracker *dev_data, const Descriptor *) override;
     void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *) override;
     virtual bool IsStorage() const override { return storage_; }
-    VkImageView GetImageView() const { return image_view_; }
+    VkImageView GetImageView() const { return image_view_state_ ? image_view_state_->image_view : VK_NULL_HANDLE; }
     const IMAGE_VIEW_STATE *GetImageViewState() const { return image_view_state_.get(); }
     IMAGE_VIEW_STATE *GetImageViewState() { return image_view_state_.get(); }
+    std::shared_ptr<IMAGE_VIEW_STATE> GetSharedImageViewState() const { return image_view_state_; }
     VkImageLayout GetImageLayout() const { return image_layout_; }
 
   private:
     bool storage_;
     std::shared_ptr<IMAGE_VIEW_STATE> image_view_state_;
-    VkImageView image_view_;
     VkImageLayout image_layout_;
 };
 
@@ -451,12 +433,12 @@ class TexelDescriptor : public Descriptor {
     void CopyUpdate(const ValidationStateTracker *dev_data, const Descriptor *) override;
     void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *) override;
     virtual bool IsStorage() const override { return storage_; }
-    VkBufferView GetBufferView() const { return buffer_view_; }
+    VkBufferView GetBufferView() const { return buffer_view_state_ ? buffer_view_state_->buffer_view : VK_NULL_HANDLE; }
     const BUFFER_VIEW_STATE *GetBufferViewState() const { return buffer_view_state_.get(); }
     BUFFER_VIEW_STATE *GetBufferViewState() { return buffer_view_state_.get(); }
+    std::shared_ptr<BUFFER_VIEW_STATE> GetSharedBufferViewState() const { return buffer_view_state_; }
 
   private:
-    VkBufferView buffer_view_;
     bool storage_;
     std::shared_ptr<BUFFER_VIEW_STATE> buffer_view_state_;
 };
@@ -469,16 +451,16 @@ class BufferDescriptor : public Descriptor {
     void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *) override;
     virtual bool IsDynamic() const override { return dynamic_; }
     virtual bool IsStorage() const override { return storage_; }
-    VkBuffer GetBuffer() const { return buffer_; }
+    VkBuffer GetBuffer() const { return buffer_state_ ? buffer_state_->buffer : VK_NULL_HANDLE; }
     const BUFFER_STATE *GetBufferState() const { return buffer_state_.get(); }
     BUFFER_STATE *GetBufferState() { return buffer_state_.get(); }
+    std::shared_ptr<BUFFER_STATE> GetSharedBufferState() const { return buffer_state_; }
     VkDeviceSize GetOffset() const { return offset_; }
     VkDeviceSize GetRange() const { return range_; }
 
   private:
     bool storage_;
     bool dynamic_;
-    VkBuffer buffer_;
     VkDeviceSize offset_;
     VkDeviceSize range_;
     std::shared_ptr<BUFFER_STATE> buffer_state_;
@@ -502,14 +484,21 @@ class AccelerationStructureDescriptor : public Descriptor {
     AccelerationStructureDescriptor(const VkDescriptorType);
     void WriteUpdate(const ValidationStateTracker *dev_data, const VkWriteDescriptorSet *, const uint32_t) override;
     VkAccelerationStructureKHR GetAccelerationStructure() const { return acc_; }
-    const ACCELERATION_STRUCTURE_STATE *GetAccelerationStructureState() const { return acc_state_.get(); }
-    ACCELERATION_STRUCTURE_STATE *GetAccelerationStructureState() { return acc_state_.get(); }
+    const ACCELERATION_STRUCTURE_STATE_KHR *GetAccelerationStructureStateKHR() const { return acc_state_.get(); }
+    ACCELERATION_STRUCTURE_STATE_KHR *GetAccelerationStructureStateKHR() { return acc_state_.get(); }
+    VkAccelerationStructureNV GetAccelerationStructureNV() const { return acc_nv_; }
+    const ACCELERATION_STRUCTURE_STATE *GetAccelerationStructureStateNV() const { return acc_state_nv_.get(); }
+    ACCELERATION_STRUCTURE_STATE *GetAccelerationStructureStateNV() { return acc_state_nv_.get(); }
     void CopyUpdate(const ValidationStateTracker *dev_data, const Descriptor *) override;
     void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *) override;
+    bool is_khr() { return is_khr_; }
 
   private:
+    bool is_khr_;
     VkAccelerationStructureKHR acc_;
-    std::shared_ptr<ACCELERATION_STRUCTURE_STATE> acc_state_;
+    std::shared_ptr<ACCELERATION_STRUCTURE_STATE_KHR> acc_state_;
+    VkAccelerationStructureNV acc_nv_;
+    std::shared_ptr<ACCELERATION_STRUCTURE_STATE> acc_state_nv_;
 };
 
 union AnyDescriptor {
@@ -541,7 +530,8 @@ struct alignas(alignof(AnyDescriptor)) DescriptorBackingStore {
 struct AllocateDescriptorSetsData {
     std::map<uint32_t, uint32_t> required_descriptors_by_type;
     std::vector<std::shared_ptr<DescriptorSetLayout const>> layout_nodes;
-    AllocateDescriptorSetsData(uint32_t);
+    void Init(uint32_t);
+    AllocateDescriptorSetsData(){};
 };
 // Helper functions for descriptor set functions that cross multiple sets
 // "Validate" will make sure an update is ok without actually performing it
@@ -567,6 +557,8 @@ bool ValidateBufferUsage(debug_report_data *report_data, BUFFER_STATE const *buf
 struct DecodedTemplateUpdate {
     std::vector<VkWriteDescriptorSet> desc_writes;
     std::vector<VkWriteDescriptorSetInlineUniformBlockEXT> inline_infos;
+    std::vector<VkWriteDescriptorSetAccelerationStructureKHR> inline_infos_khr;
+    std::vector<VkWriteDescriptorSetAccelerationStructureNV> inline_infos_nv;
     DecodedTemplateUpdate(const ValidationStateTracker *device_data, VkDescriptorSet descriptorSet,
                           const TEMPLATE_STATE *template_state, const void *pData,
                           VkDescriptorSetLayout push_layout = VK_NULL_HANDLE);
@@ -597,21 +589,17 @@ class DescriptorSet : public BASE_NODE {
                   uint32_t variable_count, const StateTracker *state_data_const);
     ~DescriptorSet();
     // A number of common Get* functions that return data based on layout from which this set was created
-    uint32_t GetTotalDescriptorCount() const { return p_layout_->GetTotalDescriptorCount(); };
-    uint32_t GetDynamicDescriptorCount() const { return p_layout_->GetDynamicDescriptorCount(); };
-    uint32_t GetBindingCount() const { return p_layout_->GetBindingCount(); };
-    VkDescriptorType GetTypeFromIndex(const uint32_t index) const { return p_layout_->GetTypeFromIndex(index); };
-    VkDescriptorType GetTypeFromBinding(const uint32_t binding) const { return p_layout_->GetTypeFromBinding(binding); };
-    uint32_t GetDescriptorCountFromIndex(const uint32_t index) const { return p_layout_->GetDescriptorCountFromIndex(index); };
+    uint32_t GetTotalDescriptorCount() const { return layout_->GetTotalDescriptorCount(); };
+    uint32_t GetDynamicDescriptorCount() const { return layout_->GetDynamicDescriptorCount(); };
+    uint32_t GetBindingCount() const { return layout_->GetBindingCount(); };
+    VkDescriptorType GetTypeFromIndex(const uint32_t index) const { return layout_->GetTypeFromIndex(index); };
+    VkDescriptorType GetTypeFromBinding(const uint32_t binding) const { return layout_->GetTypeFromBinding(binding); };
+    uint32_t GetDescriptorCountFromIndex(const uint32_t index) const { return layout_->GetDescriptorCountFromIndex(index); };
     uint32_t GetDescriptorCountFromBinding(const uint32_t binding) const {
-        return p_layout_->GetDescriptorCountFromBinding(binding);
+        return layout_->GetDescriptorCountFromBinding(binding);
     };
-    // Return index into dynamic offset array for given binding
-    int32_t GetDynamicOffsetIndexFromBinding(uint32_t binding) const {
-        return p_layout_->GetDynamicOffsetIndexFromBinding(binding);
-    }
     // Return true if given binding is present in this set
-    bool HasBinding(const uint32_t binding) const { return p_layout_->HasBinding(binding); };
+    bool HasBinding(const uint32_t binding) const { return layout_->HasBinding(binding); };
 
     std::string StringifySetAndLayout() const;
 
@@ -622,13 +610,13 @@ class DescriptorSet : public BASE_NODE {
     // Perform a CopyUpdate whose contents were just validated using ValidateCopyUpdate
     void PerformCopyUpdate(ValidationStateTracker *dev_data, const VkCopyDescriptorSet *, const DescriptorSet *);
 
-    const std::shared_ptr<DescriptorSetLayout const> &GetLayout() const { return p_layout_; };
-    VkDescriptorSetLayout GetDescriptorSetLayout() const { return p_layout_->GetDescriptorSetLayout(); }
+    const std::shared_ptr<DescriptorSetLayout const> &GetLayout() const { return layout_; };
+    VkDescriptorSetLayout GetDescriptorSetLayout() const { return layout_->GetDescriptorSetLayout(); }
     VkDescriptorSet GetSet() const { return set_; };
     // Bind given cmd_buffer to this descriptor set and
     // update CB image layout map with image/imagesampler descriptor image layouts
-    void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *, const PIPELINE_STATE *,
-                         const std::map<uint32_t, descriptor_req> &);
+    void UpdateDrawState(ValidationStateTracker *, CMD_BUFFER_STATE *, CMD_TYPE cmd_type, const PIPELINE_STATE *,
+                         const BindingReqMap &, const char *function);
 
     // Track work that has been bound or validated to avoid duplicate work, important when large descriptor arrays
     // are present
@@ -644,28 +632,39 @@ class DescriptorSet : public BASE_NODE {
     }
     void ClearCachedValidation(CMD_BUFFER_STATE *cb_state) { cached_validation_.erase(cb_state); }
     VkSampler const *GetImmutableSamplerPtrFromBinding(const uint32_t index) const {
-        return p_layout_->GetImmutableSamplerPtrFromBinding(index);
+        return layout_->GetImmutableSamplerPtrFromBinding(index);
     };
     // For a particular binding, get the global index
     const IndexRange GetGlobalIndexRangeFromBinding(const uint32_t binding, bool actual_length = false) const {
-        if (actual_length && binding == p_layout_->GetMaxBinding() && IsVariableDescriptorCount(binding)) {
-            IndexRange range = p_layout_->GetGlobalIndexRangeFromBinding(binding);
+        if (actual_length && binding == layout_->GetMaxBinding() && IsVariableDescriptorCount(binding)) {
+            IndexRange range = layout_->GetGlobalIndexRangeFromBinding(binding);
             auto diff = GetDescriptorCountFromBinding(binding) - GetVariableDescriptorCount();
             range.end -= diff;
             return range;
         }
-        return p_layout_->GetGlobalIndexRangeFromBinding(binding);
+        return layout_->GetGlobalIndexRangeFromBinding(binding);
     };
     // Return true if any part of set has ever been updated
     bool IsUpdated() const { return some_update_; };
-    bool IsPushDescriptor() const { return p_layout_->IsPushDescriptor(); };
-    bool IsVariableDescriptorCount(uint32_t binding) const { return p_layout_->IsVariableDescriptorCount(binding); }
+    bool IsPushDescriptor() const { return layout_->IsPushDescriptor(); };
+    bool IsVariableDescriptorCount(uint32_t binding) const { return layout_->IsVariableDescriptorCount(binding); }
     bool IsUpdateAfterBind(uint32_t binding) const {
-        return !!(p_layout_->GetDescriptorBindingFlagsFromBinding(binding) & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT);
+        return !!(layout_->GetDescriptorBindingFlagsFromBinding(binding) & VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
     }
     uint32_t GetVariableDescriptorCount() const { return variable_count_; }
     DESCRIPTOR_POOL_STATE *GetPoolState() const { return pool_state_; }
     const Descriptor *GetDescriptorFromGlobalIndex(const uint32_t index) const { return descriptors_[index].get(); }
+    const Descriptor *GetDescriptorFromBinding(const uint32_t binding, const uint32_t index = 0) const {
+        const auto range = GetGlobalIndexRangeFromBinding(binding);
+        if ((range.start + index) >= range.end) {
+            return nullptr;
+        }
+        return descriptors_[range.start + index].get();
+    }
+    // For a given dynamic offset array, return the corresponding index into the list of descriptors in set
+    const Descriptor *GetDescriptorFromDynamicOffsetIndex(const uint32_t index) const {
+        return descriptors_[dynamic_offset_idx_to_descriptor_list_.at(index)].get();
+    }
     uint64_t GetChangeCount() const { return change_count_; }
 
     const std::vector<safe_VkWriteDescriptorSet> &GetWrites() const { return push_descriptor_set_writes; }
@@ -681,7 +680,7 @@ class DescriptorSet : public BASE_NODE {
     bool some_update_;  // has any part of the set ever been updated?
     VkDescriptorSet set_;
     DESCRIPTOR_POOL_STATE *pool_state_;
-    const std::shared_ptr<DescriptorSetLayout const> p_layout_;
+    const std::shared_ptr<DescriptorSetLayout const> layout_;
     // NOTE: the the backing store for the descriptors must be declared *before* it so it will be destructed *after* it
     // "Destructors for nonstatic member objects are called in the reverse order in which they appear in the class declaration."
     std::vector<DescriptorBackingStore> descriptor_store_;
@@ -689,6 +688,9 @@ class DescriptorSet : public BASE_NODE {
     const StateTracker *state_data_;
     uint32_t variable_count_;
     uint64_t change_count_;
+
+    // For a given dynamic offset index in the set, map to associated index of the descriptors in the set
+    std::vector<size_t> dynamic_offset_idx_to_descriptor_list_;
 
     // If this descriptor set is a push descriptor set, the descriptor
     // set writes that were last pushed.

@@ -1,5 +1,5 @@
 <!-- markdownlint-disable MD041 -->
-<!-- Copyright 2015-2019 LunarG, Inc. -->
+<!-- Copyright 2015-2020 LunarG, Inc. -->
 [![Khronos Vulkan][1]][2]
 
 [1]: https://vulkan.lunarg.com/img/Vulkan_100px_Dec16.png "https://www.khronos.org/vulkan/"
@@ -14,6 +14,8 @@
 
 GPU-Assisted Validation is implemented in the SPIR-V Tools optimizer and the `VK_LAYER_KHRONOS_validation` layer.
 This document covers the design of the layer portion of the implementation.
+
+GPU-Assisted Validation can easily be enabled and configured using the [Vulkan Configurator](https://vulkan.lunarg.com/doc/sdk/latest/windows/vkconfig.html) included with the Vulkan SDK. Or you can manually enable and configure by following the directions below.
 
 ## Basic Operation
 
@@ -56,6 +58,8 @@ A third update (Aug 2019) adds validation of building top level acceleration str
 VK_NV_ray_tracing extension is enabled.
 
 (August 2019) Add bounds checking for pointers retrieved from vkGetBufferDeviceAddressEXT.
+
+(December 2020) Add bounds checking for reads and writes to uniform buffers, storage buffers, uniform texel buffers, and storage texel buffers
 
 ### Out-of-Bounds(OOB) Descriptor Array Indexing
 
@@ -675,6 +679,8 @@ The Stage is the integer value used in SPIR-V for each of the Execution Models:
 |Geometry       |3      |
 |Fragment       |4      |
 |Compute        |5      |
+|Task           |5267   |
+|Mesh           |5268   |
 |RayGenerationNV|5313   |
 |IntersectionNV |5314   |
 |AnyHitNV       |5315   |
@@ -695,6 +701,8 @@ Here are words for each stage:
 |Geometry       |PrimitiveID       |InvocationID   | unused        |
 |Fragment       |FragCoord.x       |FragCoord.y    | unused        |
 |Compute        |GlobalInvocID.x   |GlobalInvocID.y|GlobalInvocID.z|
+|Task           |GlobalInvocID.x   |GlobalInvocID.y|GlobalInvocID.z|
+|Mesh           |GlobalInvocID.x   |GlobalInvocID.y|GlobalInvocID.z|
 |RayGenerationNV|LaunchIdNV.x      |LaunchIdNV.y   |LaunchIdNV.z   |
 |IntersectionNV |LaunchIdNV.x      |LaunchIdNV.y   |LaunchIdNV.z   |
 |AnyHitNV       |LaunchIdNV.x      |LaunchIdNV.y   |LaunchIdNV.z   |
@@ -952,6 +960,20 @@ vkCmdBuildAccelerationStructureNV(...)  // build top level using modified instan
 
 vkEndCommandBuffer(...)
 ```
+
+## GPU-Assisted Buffer Access Validation
+
+When GPU-Assisted Validation is active, either the descriptor indexing input buffer
+(if descriptor indexing is enabled) or an input buffer of the same format without array
+sizes is used to inform instrumented shaders of the size of each of the buffers the shader
+may access.  If the shader accesses a buffer beyond the declared length of the buffer, the
+instrumentation will return an error to the validation layer.  This checking applies to to
+all uniform and storage buffers. If a buffer access is found to be out of bounds, it will
+not be performed.  Instead, writes will be skipped, and reads will return 0.
+Note that this validation can be disabled by setting "khronos_validation.gpuav_buffer_oob = false" 
+in a vk_layer_settings.txt file. Note also that if a robust buffer access extension is enabled
+this buffer access checking will be disabled, since such accesses become valid.
+
 ## GPU-Assisted Validation Testing
 
 Validation Layer Tests (VLTs) exist for GPU-Assisted Validation.

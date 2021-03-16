@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -121,13 +121,9 @@ class ErrorMonitor {
     void SetAllowedFailureMsg(const char *const msg);
 
     VkBool32 CheckForDesiredMsg(const char *const msgString);
-    std::vector<std::string> GetOtherFailureMsgs() const;
-    VkDebugReportFlagsEXT GetMessageFlags() const;
-    bool AnyDesiredMsgFound() const;
-    bool AllDesiredMsgsFound() const;
+    VkDebugReportFlagsEXT GetMessageFlags();
     void SetError(const char *const errorString);
     void SetBailout(bool *bailout);
-    void DumpFailureMsgs() const;
 
     // Helpers
 
@@ -141,6 +137,11 @@ class ErrorMonitor {
     // TODO: This is stopgap to block new unexpected errors from being introduced. The long-term goal is to remove the use of this
     // function and its definition.
     bool IgnoreMessage(std::string const &msg) const;
+    std::vector<std::string> GetOtherFailureMsgs() const;
+    bool AnyDesiredMsgFound() const;
+    bool AllDesiredMsgsFound() const;
+    void DumpFailureMsgs() const;
+    void MonitorReset();
 
     VkFlags message_flags_;
     std::unordered_multiset<std::string> desired_message_strings_;
@@ -200,6 +201,30 @@ class VkCommandPoolObj;
 class VkCommandBufferObj;
 class VkDepthStencilObj;
 
+typedef enum {
+    kGalaxyS10,
+    kPixel3,
+    kPixelC,
+    kNexusPlayer,
+    kShieldTV,
+    kShieldTVb,
+    kPixel3aXL,
+    kPixel2XL,
+    kMockICD,
+} PlatformType;
+
+const std::unordered_map<PlatformType, std::string, std::hash<int>> vk_gpu_table = {
+    {kGalaxyS10, "Mali-G76"},
+    {kPixel3, "Adreno (TM) 630"},
+    {kPixelC, "NVIDIA Tegra X1"},
+    {kNexusPlayer, "PowerVR Rogue G6430"},
+    {kShieldTV, "NVIDIA Tegra X1 (nvgpu)"},
+    {kShieldTVb, "NVIDIA Tegra X1 (rev B) (nvgpu)"},
+    {kPixel3aXL, "Adreno (TM) 615"},
+    {kPixel2XL, "Adreno (TM) 540"},
+    {kMockICD, "Vulkan Mock Device"},
+};
+
 class VkRenderFramework : public VkTestFramework {
   public:
     VkInstance instance() { return instance_; }
@@ -207,9 +232,10 @@ class VkRenderFramework : public VkTestFramework {
     VkDeviceObj *DeviceObj() const { return m_device; }
     VkPhysicalDevice gpu();
     VkRenderPass renderPass() { return m_renderPass; }
-    const VkRenderPassCreateInfo &RenderPassInfo() const { return renderPass_info_; };
+    const VkRenderPassCreateInfo &RenderPassInfo() const { return m_renderPass_info; };
     VkFramebuffer framebuffer() { return m_framebuffer; }
     ErrorMonitor &Monitor();
+    VkPhysicalDeviceProperties physDevProps();
 
     static bool InstanceLayerSupported(const char *layer_name, uint32_t spec_version = 0, uint32_t impl_version = 0);
     static bool InstanceExtensionSupported(const char *extension_name, uint32_t spec_version = 0);
@@ -222,6 +248,7 @@ class VkRenderFramework : public VkTestFramework {
     void InitViewport();
     bool InitSurface();
     bool InitSurface(float width, float height);
+    void InitSwapchainInfo();
     bool InitSwapchain(VkSurfaceKHR &surface, VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                        VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR);
     bool InitSwapchain(VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -233,6 +260,7 @@ class VkRenderFramework : public VkTestFramework {
     void InitRenderTarget(uint32_t targets, VkImageView *dsBinding);
     void DestroyRenderTarget();
 
+    bool IsPlatform(PlatformType platform);
     void GetPhysicalDeviceFeatures(VkPhysicalDeviceFeatures *features);
     void GetPhysicalDeviceProperties(VkPhysicalDeviceProperties *props);
     void InitState(VkPhysicalDeviceFeatures *features = nullptr, void *create_device_pnext = nullptr,
@@ -248,7 +276,6 @@ class VkRenderFramework : public VkTestFramework {
         return DeviceExtensionSupported(name, spec_version);
     }
     bool DeviceExtensionEnabled(const char *name);
-    bool DeviceIsMockICD();
     bool DeviceSimulation();
 
   protected:
@@ -264,15 +291,29 @@ class VkRenderFramework : public VkTestFramework {
     std::vector<const char *> &m_instance_extension_names = instance_extensions_;  // compatibility alias name
     VkInstance instance_;
     VkPhysicalDevice gpu_;
+    VkPhysicalDeviceProperties physDevProps_;
 
     VkDeviceObj *m_device;
     VkCommandPoolObj *m_commandPool;
     VkCommandBufferObj *m_commandBuffer;
     VkRenderPass m_renderPass;
-    VkRenderPassCreateInfo renderPass_info_ = {};
+    VkRenderPassCreateInfo m_renderPass_info = {};
+    std::vector<VkAttachmentDescription> m_renderPass_attachments;
+    std::vector<VkSubpassDescription> m_renderPass_subpasses;
+    std::vector<VkSubpassDependency> m_renderPass_dependencies;
+
     VkFramebuffer m_framebuffer;
+    VkFramebufferCreateInfo m_framebuffer_info;
+    std::vector<VkImageView> m_framebuffer_attachments;
+
+    // WSI items
     VkSurfaceKHR m_surface;
     VkSwapchainKHR m_swapchain;
+    VkSurfaceCapabilitiesKHR m_surface_capabilities;
+    std::vector<VkSurfaceFormatKHR> m_surface_formats;
+    std::vector<VkPresentModeKHR> m_surface_present_modes;
+    VkCompositeAlphaFlagBitsKHR m_surface_composite_alpha;
+
     std::vector<VkViewport> m_viewports;
     std::vector<VkRect2D> m_scissors;
     float m_lineWidth;
@@ -304,10 +345,11 @@ class VkRenderFramework : public VkTestFramework {
 class VkDescriptorSetObj;
 class VkConstantBufferObj;
 class VkPipelineObj;
+typedef vk_testing::Event VkEventObj;
 typedef vk_testing::Fence VkFenceObj;
 typedef vk_testing::Buffer VkBufferObj;
 typedef vk_testing::AccelerationStructure VkAccelerationStructureObj;
-
+typedef vk_testing::AccelerationStructureKHR VkAccelerationStructurekhrObj;
 class VkCommandPoolObj : public vk_testing::CommandPool {
   public:
     VkCommandPoolObj(VkDeviceObj *device, uint32_t queue_family_index, VkCommandPoolCreateFlags flags = 0);
@@ -321,6 +363,7 @@ class VkCommandBufferObj : public vk_testing::CommandBuffer {
                          uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers, uint32_t bufferMemoryBarrierCount,
                          const VkBufferMemoryBarrier *pBufferMemoryBarriers, uint32_t imageMemoryBarrierCount,
                          const VkImageMemoryBarrier *pImageMemoryBarriers);
+    void PipelineBarrier2KHR(const VkDependencyInfoKHR *pDependencyInfo);
     void ClearAllBuffers(const std::vector<std::unique_ptr<VkImageObj>> &color_objs, VkClearColorValue clear_color,
                          VkDepthStencilObj *depth_stencil_obj, float depth_clear_value, uint32_t stencil_clear_value);
     void PrepareAttachments(const std::vector<std::unique_ptr<VkImageObj>> &color_atts, VkDepthStencilObj *depth_stencil_att);
@@ -348,6 +391,15 @@ class VkCommandBufferObj : public vk_testing::CommandBuffer {
                                 uint32_t rangeCount, const VkImageSubresourceRange *pRanges);
     void BuildAccelerationStructure(VkAccelerationStructureObj *as, VkBuffer scratchBuffer);
     void BuildAccelerationStructure(VkAccelerationStructureObj *as, VkBuffer scratchBuffer, VkBuffer instanceData);
+    void SetEvent(VkEventObj &event, VkPipelineStageFlags stageMask) { event.cmd_set(*this, stageMask); }
+    void ResetEvent(VkEventObj &event, VkPipelineStageFlags stageMask) { event.cmd_reset(*this, stageMask); }
+    void WaitEvents(uint32_t eventCount, const VkEvent *pEvents, VkPipelineStageFlags srcStageMask,
+                    VkPipelineStageFlags dstStageMask, uint32_t memoryBarrierCount, const VkMemoryBarrier *pMemoryBarriers,
+                    uint32_t bufferMemoryBarrierCount, const VkBufferMemoryBarrier *pBufferMemoryBarriers,
+                    uint32_t imageMemoryBarrierCount, const VkImageMemoryBarrier *pImageMemoryBarriers) {
+        vk::CmdWaitEvents(handle(), eventCount, pEvents, srcStageMask, dstStageMask, memoryBarrierCount, pMemoryBarriers,
+                          bufferMemoryBarrierCount, pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
+    }
 
   protected:
     VkDeviceObj *m_device;
@@ -369,7 +421,8 @@ class VkConstantBufferObj : public VkBufferObj {
 
 class VkRenderpassObj {
   public:
-    VkRenderpassObj(VkDeviceObj *device);
+    VkRenderpassObj(VkDeviceObj *device, VkFormat format = VK_FORMAT_B8G8R8A8_UNORM);
+    VkRenderpassObj(VkDeviceObj *device, VkFormat format, bool depthStencil);
     ~VkRenderpassObj() NOEXCEPT;
     VkRenderPass handle() { return m_renderpass; }
 
@@ -384,14 +437,22 @@ class VkImageObj : public vk_testing::Image {
     bool IsCompatible(VkImageUsageFlags usages, VkFormatFeatureFlags features);
 
   public:
+    static VkImageCreateInfo ImageCreateInfo2D(uint32_t const width, uint32_t const height, uint32_t const mipLevels,
+                                               uint32_t const layers, VkFormat const format, VkFlags const usage,
+                                               VkImageTiling const requested_tiling = VK_IMAGE_TILING_LINEAR,
+                                               const std::vector<uint32_t> *queue_families = nullptr);
     void Init(uint32_t const width, uint32_t const height, uint32_t const mipLevels, VkFormat const format, VkFlags const usage,
               VkImageTiling const tiling = VK_IMAGE_TILING_LINEAR, VkMemoryPropertyFlags const reqs = 0,
               const std::vector<uint32_t> *queue_families = nullptr, bool memory = true);
+    void Init(const VkImageCreateInfo &create_info, VkMemoryPropertyFlags const reqs = 0, bool memory = true);
+
     void init(const VkImageCreateInfo *create_info);
 
     void InitNoLayout(uint32_t const width, uint32_t const height, uint32_t const mipLevels, VkFormat const format,
                       VkFlags const usage, VkImageTiling tiling = VK_IMAGE_TILING_LINEAR, VkMemoryPropertyFlags reqs = 0,
                       const std::vector<uint32_t> *queue_families = nullptr, bool memory = true);
+
+    void InitNoLayout(const VkImageCreateInfo &create_info, VkMemoryPropertyFlags reqs = 0, bool memory = true);
 
     //    void clear( CommandBuffer*, uint32_t[4] );
 
@@ -417,18 +478,20 @@ class VkImageObj : public vk_testing::Image {
 
     VkImage image() const { return handle(); }
 
-    VkImageView targetView(VkFormat format, VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT) {
+    VkImageView targetView(VkFormat format, VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT, uint32_t baseMipLevel = 0,
+                           uint32_t levelCount = VK_REMAINING_MIP_LEVELS, uint32_t baseArrayLayer = 0,
+                           uint32_t layerCount = VK_REMAINING_ARRAY_LAYERS, VkImageViewType type = VK_IMAGE_VIEW_TYPE_2D) {
         if (!m_targetView.initialized()) {
             VkImageViewCreateInfo createView = {};
             createView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             createView.image = handle();
-            createView.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            createView.viewType = type;
             createView.format = format;
             createView.components.r = VK_COMPONENT_SWIZZLE_R;
             createView.components.g = VK_COMPONENT_SWIZZLE_G;
             createView.components.b = VK_COMPONENT_SWIZZLE_B;
             createView.components.a = VK_COMPONENT_SWIZZLE_A;
-            createView.subresourceRange = {aspect, 0, 1, 0, 1};
+            createView.subresourceRange = {aspect, baseMipLevel, levelCount, baseArrayLayer, layerCount};
             createView.flags = 0;
             m_targetView.init(*m_device, createView);
         }
@@ -448,6 +511,8 @@ class VkImageObj : public vk_testing::Image {
 
     vk_testing::ImageView m_targetView;
     VkDescriptorImageInfo m_descriptorImageInfo;
+    uint32_t m_mipLevels;
+    uint32_t m_arrayLayers;
 };
 
 class VkTextureObj : public VkImageObj {
@@ -465,7 +530,7 @@ class VkDepthStencilObj : public VkImageObj {
   public:
     VkDepthStencilObj(VkDeviceObj *device);
     void Init(VkDeviceObj *device, int32_t width, int32_t height, VkFormat format,
-              VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+              VkImageUsageFlags usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VkImageAspectFlags aspect = 0);
     bool Initialized();
     VkImageView *BindInfo();
 
@@ -514,6 +579,7 @@ class VkDescriptorSetObj : public vk_testing::DescriptorPool {
 
     VkDescriptorSet GetDescriptorSetHandle() const;
     VkPipelineLayout GetPipelineLayout() const;
+    VkDescriptorSetLayout GetDescriptorSetLayout() const;
 
   protected:
     VkDeviceObj *m_device;
@@ -531,16 +597,24 @@ class VkDescriptorSetObj : public vk_testing::DescriptorPool {
 
 class VkShaderObj : public vk_testing::ShaderModule {
   public:
+    VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name = "main",
+                VkSpecializationInfo *specInfo = nullptr);
     VkShaderObj(VkDeviceObj *device, const char *shaderText, VkShaderStageFlagBits stage, VkRenderFramework *framework,
                 char const *name = "main", bool debug = false, VkSpecializationInfo *specInfo = nullptr,
                 uint32_t spirv_minor_version = 0);
     VkShaderObj(VkDeviceObj *device, const std::string spv_source, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                char const *name = "main", VkSpecializationInfo *specInfo = nullptr);
+                char const *name = "main", VkSpecializationInfo *specInfo = nullptr, const spv_target_env env = SPV_ENV_VULKAN_1_0);
     VkPipelineShaderStageCreateInfo const &GetStageCreateInfo() const;
+
+    bool InitFromGLSL(VkRenderFramework &framework, const char *shader_code, bool debug = false, uint32_t spirv_minor_version = 0);
+    VkResult InitFromGLSLTry(VkRenderFramework &framework, const char *shader_code, bool debug = false,
+                             uint32_t spirv_minor_version = 0);
+    bool InitFromASM(VkRenderFramework &framework, const std::string &spv_source, const spv_target_env env = SPV_ENV_VULKAN_1_0);
+    VkResult InitFromASMTry(VkRenderFramework &framework, const std::string &spv_source);
 
   protected:
     VkPipelineShaderStageCreateInfo m_stage_info;
-    VkDeviceObj *m_device;
+    VkDeviceObj &m_device;
 };
 
 class VkPipelineLayoutObj : public vk_testing::PipelineLayout {

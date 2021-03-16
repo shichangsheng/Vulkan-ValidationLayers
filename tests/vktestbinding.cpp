@@ -275,7 +275,7 @@ void Device::init(std::vector<const char *> &extensions, VkPhysicalDeviceFeature
     // Let VkPhysicalDeviceFeatures2 take priority over VkPhysicalDeviceFeatures,
     // since it supports extensions
 
-    if (!(lvl_find_in_chain<VkPhysicalDeviceFeatures2>(dev_info.pNext))) {
+    if (!(LvlFindInChain<VkPhysicalDeviceFeatures2>(dev_info.pNext))) {
         if (features) {
             dev_info.pEnabledFeatures = features;
         } else {
@@ -465,9 +465,9 @@ NON_DISPATCHABLE_HANDLE_DTOR(Fence, vk::DestroyFence)
 
 void Fence::init(const Device &dev, const VkFenceCreateInfo &info) { NON_DISPATCHABLE_HANDLE_INIT(vk::CreateFence, dev, &info); }
 
-VkResult Fence::wait(VkBool32 wait_all, uint64_t timeout) const {
+VkResult Fence::wait(uint64_t timeout) const {
     VkFence fence = handle();
-    return vk::WaitForFences(device(), 1, &fence, wait_all, timeout);
+    return vk::WaitForFences(device(), 1, &fence, VK_TRUE, timeout);
 }
 
 NON_DISPATCHABLE_HANDLE_DTOR(Semaphore, vk::DestroySemaphore)
@@ -481,6 +481,14 @@ NON_DISPATCHABLE_HANDLE_DTOR(Event, vk::DestroyEvent)
 void Event::init(const Device &dev, const VkEventCreateInfo &info) { NON_DISPATCHABLE_HANDLE_INIT(vk::CreateEvent, dev, &info); }
 
 void Event::set() { EXPECT(vk::SetEvent(device(), handle()) == VK_SUCCESS); }
+
+void Event::cmd_set(const CommandBuffer &cmd, VkPipelineStageFlags stage_mask) {
+    vk::CmdSetEvent(cmd.handle(), handle(), stage_mask);
+}
+
+void Event::cmd_reset(const CommandBuffer &cmd, VkPipelineStageFlags stage_mask) {
+    vk::CmdResetEvent(cmd.handle(), handle(), stage_mask);
+}
 
 void Event::reset() { EXPECT(vk::ResetEvent(device(), handle()) == VK_SUCCESS); }
 
@@ -610,18 +618,24 @@ AccelerationStructure::~AccelerationStructure() {
     }
 }
 
+AccelerationStructureKHR::~AccelerationStructureKHR() {
+    if (initialized()) {
+        PFN_vkDestroyAccelerationStructureKHR vkDestroyAccelerationStructureKHR =
+            (PFN_vkDestroyAccelerationStructureKHR)vk::GetDeviceProcAddr(device(), "vkDestroyAccelerationStructureKHR");
+        assert(vkDestroyAccelerationStructureKHR != nullptr);
+        vkDestroyAccelerationStructureKHR(device(), handle(), nullptr);
+    }
+}
 VkMemoryRequirements2 AccelerationStructure::memory_requirements() const {
     PFN_vkGetAccelerationStructureMemoryRequirementsNV vkGetAccelerationStructureMemoryRequirementsNV =
         (PFN_vkGetAccelerationStructureMemoryRequirementsNV)vk::GetDeviceProcAddr(device(),
                                                                                   "vkGetAccelerationStructureMemoryRequirementsNV");
     assert(vkGetAccelerationStructureMemoryRequirementsNV != nullptr);
-
+    VkMemoryRequirements2 memoryRequirements = {};
     VkAccelerationStructureMemoryRequirementsInfoNV memoryRequirementsInfo = {};
     memoryRequirementsInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_NV;
     memoryRequirementsInfo.type = VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_NV;
     memoryRequirementsInfo.accelerationStructure = handle();
-
-    VkMemoryRequirements2 memoryRequirements = {};
     vkGetAccelerationStructureMemoryRequirementsNV(device(), &memoryRequirementsInfo, &memoryRequirements);
     return memoryRequirements;
 }
@@ -671,15 +685,39 @@ void AccelerationStructure::init(const Device &dev, const VkAccelerationStructur
         EXPECT(vkGetAccelerationStructureHandleNV(dev.handle(), handle(), sizeof(uint64_t), &opaque_handle_) == VK_SUCCESS);
     }
 }
-
-void AccelerationStructure::create_scratch_buffer(const Device &dev, Buffer *buffer) {
+void AccelerationStructure::create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo) {
     VkMemoryRequirements scratch_buffer_memory_requirements = build_scratch_memory_requirements().memoryRequirements;
-
     VkBufferCreateInfo create_info = {};
-    create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     create_info.size = scratch_buffer_memory_requirements.size;
-    create_info.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
-    return buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (pCreateInfo) {
+        create_info.sType = pCreateInfo->sType;
+        create_info.usage = pCreateInfo->usage;
+    } else {
+        create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        create_info.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
+    }
+    buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+}
+
+void AccelerationStructureKHR::init(const Device &dev, const VkAccelerationStructureCreateInfoKHR &info, bool init_memory) {
+    PFN_vkCreateAccelerationStructureKHR vkCreateAccelerationStructureKHR =
+        (PFN_vkCreateAccelerationStructureKHR)vk::GetDeviceProcAddr(dev.handle(), "vkCreateAccelerationStructureKHR");
+    assert(vkCreateAccelerationStructureKHR != nullptr);
+    NON_DISPATCHABLE_HANDLE_INIT(vkCreateAccelerationStructureKHR, dev, &info);
+    info_ = info;
+}
+void AccelerationStructureKHR::create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo) {
+    VkBufferCreateInfo create_info = {};
+    create_info.size = 0;
+    if (pCreateInfo) {
+        create_info.sType = pCreateInfo->sType;
+        create_info.usage = pCreateInfo->usage;
+        create_info.size = pCreateInfo->size;
+    } else {
+        create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        create_info.usage = VK_BUFFER_USAGE_RAY_TRACING_BIT_NV;
+    }
+    buffer->init(dev, create_info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 }
 
 NON_DISPATCHABLE_HANDLE_DTOR(ShaderModule, vk::DestroyShaderModule)

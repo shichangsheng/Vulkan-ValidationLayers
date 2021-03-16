@@ -1,7 +1,7 @@
-/* Copyright (c) 2019-2020 The Khronos Group Inc.
- * Copyright (c) 2019-2020 Valve Corporation
- * Copyright (c) 2019-2020 LunarG, Inc.
- * Copyright (C) 2019-2020 Google Inc.
+/* Copyright (c) 2019-2021 The Khronos Group Inc.
+ * Copyright (c) 2019-2021 Valve Corporation
+ * Copyright (c) 2019-2021 LunarG, Inc.
+ * Copyright (C) 2019-2021 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +25,15 @@
 
 #include <algorithm>
 #include <array>
+#include <vector>
 #include "range_vector.h"
 #ifndef SPARSE_CONTAINER_UNIT_TEST
 #include "vulkan/vulkan.h"
 #else
 #include "vk_snippets.h"
 #endif
+
+class IMAGE_STATE;
 
 namespace subresource_adapter {
 
@@ -47,6 +50,7 @@ using split_op_keep_upper = sparse_container::split_op_keep_upper;
 // Interface for aspect specific traits objects (now isolated in the cpp file)
 class AspectParameters {
   public:
+    virtual ~AspectParameters() {}
     static const AspectParameters* Get(VkImageAspectFlags);
     typedef uint32_t (*MaskIndexFunc)(VkImageAspectFlags);
     virtual VkImageAspectFlags AspectMask() const = 0;
@@ -78,8 +82,8 @@ class RangeEncoder {
 
     // The default constructor for default iterators
     RangeEncoder()
-        : full_range_(),
-          limits_(),
+        : limits_(),
+          full_range_(),
           mip_size_(0),
           aspect_size_(0),
           aspect_bits_(nullptr),
@@ -94,7 +98,8 @@ class RangeEncoder {
     // Create the encoder suitable to the full range (aspect mask *must* be canonical)
     RangeEncoder(const VkImageSubresourceRange& full_range)
         : RangeEncoder(full_range, AspectParameters::Get(full_range.aspectMask)) {}
-    RangeEncoder(const RangeEncoder& from);
+    RangeEncoder(const RangeEncoder& from) = default;
+    ;
 
     inline bool InRange(const VkImageSubresource& subres) const {
         bool in_range = (subres.mipLevel < limits_.mipLevel) && (subres.arrayLayer < limits_.arrayLayer) &&
@@ -220,9 +225,10 @@ class RangeEncoder {
     uint32_t LowerBoundWithStartImpl2(VkImageAspectFlags aspect_mask, uint32_t start) const;
     uint32_t LowerBoundWithStartImpl3(VkImageAspectFlags aspect_mask, uint32_t start) const;
 
+    Subresource limits_;
+
   private:
     VkImageSubresourceRange full_range_;
-    Subresource limits_;
     const size_t mip_size_;
     const size_t aspect_size_;
     const VkImageAspectFlagBits* const aspect_bits_;
@@ -322,6 +328,206 @@ class RangeGenerator {
     uint32_t mip_index_ = 0;
     uint32_t aspect_count_ = 0;
     uint32_t aspect_index_ = 0;
+};
+
+class ImageRangeEncoder : public RangeEncoder {
+  public:
+    // The default constructor for default iterators
+    ImageRangeEncoder() : image_(nullptr) {}
+
+    ImageRangeEncoder(const IMAGE_STATE& image, const AspectParameters* param);
+    ImageRangeEncoder(const IMAGE_STATE& image);
+    ImageRangeEncoder(const ImageRangeEncoder& from) = default;
+
+    inline IndexType Encode(const VkImageSubresource& subres, uint32_t layer, VkOffset3D offset) const;
+    void Decode(const VkImageSubresource& subres, const IndexType& encode, uint32_t& out_layer, VkOffset3D& out_offset) const;
+
+    const VkSubresourceLayout& SubresourceLayout(const VkImageSubresource& subres) const;
+    inline const VkExtent3D& SubresourceExtent(int mip_level, int aspect_index_) const {
+        return subres_extents_[mip_level * limits_.aspect_index + aspect_index_];
+    }
+    inline const double& TexelSize(int aspect_index) const { return texel_sizes_[aspect_index]; }
+    inline bool IsLinearImage() const { return linear_image; }
+    inline VkDeviceSize TotalSize() const { return total_size_; }
+
+  private:
+    bool linear_image;
+    const IMAGE_STATE* image_;
+    std::vector<double> texel_sizes_;
+    std::vector<VkExtent3D> subres_extents_;
+    std::vector<VkSubresourceLayout> subres_layouts_;
+    VkDeviceSize total_size_;
+};
+
+class ImageRangeGenerator {
+  public:
+    ImageRangeGenerator() : encoder_(nullptr), subres_range_(), offset_(), extent_(), base_address_(), pos_() {}
+    bool operator!=(const ImageRangeGenerator& rhs) { return (pos_ != rhs.pos_) || (&encoder_ != &rhs.encoder_); }
+    ImageRangeGenerator(const ImageRangeEncoder& encoder, const VkImageSubresourceRange& subres_range, const VkOffset3D& offset,
+                        const VkExtent3D& extent, VkDeviceSize base_address);
+    inline const IndexRange& operator*() const { return pos_; }
+    inline const IndexRange* operator->() const { return &pos_; }
+    ImageRangeGenerator* operator++();
+    void SetPos();
+
+  private:
+    const ImageRangeEncoder* encoder_;
+    const VkImageSubresourceRange subres_range_;
+    const VkOffset3D offset_;
+    const VkExtent3D extent_;
+    VkDeviceSize base_address_;
+    uint32_t range_arraylayer_base_;
+    uint32_t range_layer_count_;
+
+    IndexRange pos_;
+    IndexRange offset_offset_y_base_;
+    IndexRange offset_layer_base_;
+    uint32_t offset_y_index_;
+    uint32_t offset_y_count_;
+    uint32_t aspect_count_ = 0;
+    uint32_t aspect_index_ = 0;
+
+    // It doesn't have offset_z. If the z > 1, it will be used in arrayLayer.
+    uint32_t arrayLayer_index_;
+    uint32_t layer_count_;
+    uint32_t mip_level_index_;
+    uint32_t mip_count_;
+    const VkSubresourceLayout* subres_layout_;
+};
+
+// Designed for use with RangeMap of MappedType
+template <typename Map>
+class ConstMapView {
+  public:
+    using KeyType = typename Map::key_type;
+    using MappedType = typename Map::mapped_type;
+    using MapValueType = typename Map::mapped_type;
+    using MapIterator = typename Map::const_iterator;
+    using CachedLowerBound = typename sparse_container::cached_lower_bound_impl<const Map>;
+
+    struct ValueType {
+        const VkImageSubresource& subresource;
+        MapIterator it;
+        ValueType(const VkImageSubresource& subresource_) : subresource(subresource_), it(){};
+    };
+    class ConstIterator {
+      public:
+        ConstIterator()
+            : view_(nullptr),
+              range_gen_(),
+              cached_it_(),
+              pos_(range_gen_.GetSubresource()),
+              current_index_(),
+              constant_value_bound_() {}
+        ConstIterator& operator++() {
+            Increment();
+            return *this;
+        }
+        const ValueType* operator->() const { return &pos_; }
+        const ValueType& operator*() const { return pos_; }
+        // Only for comparisons to end()
+        // Note: if a fully function == is needed, the AtEnd needs to be maintained, as end_iterator is a static.
+        bool AtEnd() const { return pos_.subresource.aspectMask == 0; }
+        bool operator==(const ConstIterator& other) const { return AtEnd() && other.AtEnd(); };
+        bool operator!=(const ConstIterator& other) const { return AtEnd() != other.AtEnd(); };
+
+      protected:
+        friend ConstMapView;
+        ConstIterator(const ConstMapView& view, const VkImageSubresourceRange& range)
+            : view_(&view),
+              range_gen_(view.GetEncoder(), range),
+              cached_it_(view.GetMap(), range_gen_->begin),
+              pos_(range_gen_.GetSubresource()),
+              current_index_(range_gen_->begin),
+              constant_value_bound_(current_index_) {
+            UpdateRangeAndValue();
+        }
+
+        void Increment() {
+            ++current_index_;
+            ++(range_gen_.GetSubresourceGenerator());
+            if (constant_value_bound_ <= current_index_) {
+                UpdateRangeAndValue();
+            }
+        }
+
+        void ForceEndCondition() { range_gen_.GetSubresource().aspectMask = 0; }
+
+        // Constant value range logice, subreource / lower bound position advance logic
+        // TODO: convert this piece into a template _impl function suitable for const and non-const view iterators
+        void UpdateRangeAndValue() {
+            bool not_found = true;
+            while (range_gen_->non_empty() && not_found) {
+                if (!cached_it_.includes(current_index_)) {
+                    // The result of the seek can be invalid, valid, or end...
+                    cached_it_.seek(current_index_);
+                }
+
+                if (cached_it_->lower_bound == view_->GetMap().end()) {
+                    // We're past the end of mapped data. Set end condtion.
+                    ForceEndCondition();
+                    not_found = false;
+                } else {
+                    // Search within the current range_ for a constant valid constant value interval
+                    // The while condition allows the parallel iterator to advance constant value ranges as needed.
+                    while (range_gen_->includes(current_index_) && not_found) {
+                        if (cached_it_->valid) {
+                            // Our position with in the map is valid so we can update our value
+                            pos_.it = cached_it_->lower_bound;
+                            constant_value_bound_ = std::min(cached_it_->lower_bound->first.end, range_gen_->end);
+                            not_found = false;
+                        } else {
+                            // We're skipping this gap in Map, set the index to the exclusive end and look again
+                            // Note that we ONLY need to Seek the Subresource generator on a skip condition.
+                            current_index_ = std::min(cached_it_->lower_bound->first.begin, range_gen_->end);
+                            constant_value_bound_ = current_index_;
+                            // Move the subresource to the end of the skipped range
+                            range_gen_.GetSubresourceGenerator().Seek(current_index_);
+                            cached_it_.seek(current_index_);
+                        }
+                    }
+
+                    if (not_found) {
+                        // We need to advance the index range to search as the current cached_it_ lies outside it, and there's
+                        // no easy way to seek RangeGen
+                        // ++range_gen will update Subresource.
+                        ++range_gen_;
+                        current_index_ = range_gen_->begin;
+                    }
+                }
+            }
+
+            if (range_gen_->empty()) {
+                ForceEndCondition();
+            }
+        }
+
+      private:
+        const ConstMapView* view_;
+        RangeGenerator range_gen_;
+        CachedLowerBound cached_it_;
+        ValueType pos_;
+        IndexType current_index_;
+        IndexType constant_value_bound_;
+    };
+
+    const Map& GetMap() const { return *map_; }
+    const RangeEncoder& GetEncoder() const { return *encoder_; }
+
+    inline ConstIterator Begin(const VkImageSubresourceRange& range) const { return ConstIterator(*this, range); }
+    inline const ConstIterator& End() const { return end_; }
+
+    // Enable range based for....
+    inline ConstIterator begin() const { return Begin(encoder_->FullRange()); }
+    inline const ConstIterator& end() const { return End(); }
+
+    ConstMapView() : map_(nullptr), encoder_(nullptr), end_() {}
+    ConstMapView(const Map& map, const RangeEncoder& encoder) : map_(&map), encoder_(&encoder), end_() {}
+
+  private:
+    const Map* map_;
+    const RangeEncoder* encoder_;
+    const ConstIterator end_;
 };
 
 // double wrapped map variants.. to avoid needing to templatize on the range map type.  The underlying maps are available for
@@ -443,32 +649,32 @@ class BothRangeMap {
 
     inline iterator begin() {
         if (SmallMode()) {
-            return iterator(small_map_.begin());
+            return iterator(small_map_->begin());
         } else {
-            return iterator(big_map_.begin());
+            return iterator(big_map_->begin());
         }
     }
     inline const_iterator cbegin() const {
         if (SmallMode()) {
-            return const_iterator(small_map_.begin());
+            return const_iterator(small_map_->begin());
         } else {
-            return const_iterator(big_map_.begin());
+            return const_iterator(big_map_->begin());
         }
     }
     inline const_iterator begin() const { return cbegin(); }
 
     inline iterator end() {
         if (SmallMode()) {
-            return iterator(small_map_.end());
+            return iterator(small_map_->end());
         } else {
-            return iterator(big_map_.end());
+            return iterator(big_map_->end());
         }
     }
     inline const_iterator cend() const {
         if (SmallMode()) {
-            return const_iterator(small_map_.end());
+            return const_iterator(small_map_->end());
         } else {
-            return const_iterator(big_map_.end());
+            return const_iterator(big_map_->end());
         }
     }
     inline const_iterator end() const { return cend(); }
@@ -476,36 +682,36 @@ class BothRangeMap {
     inline iterator find(const key_type& key) {
         assert(!Tristate());
         if (SmallMode()) {
-            return iterator(small_map_.find(key));
+            return iterator(small_map_->find(key));
         } else {
-            return iterator(big_map_.find(key));
+            return iterator(big_map_->find(key));
         }
     }
 
     inline const_iterator find(const key_type& key) const {
         assert(!Tristate());
         if (SmallMode()) {
-            return const_iterator(small_map_.find(key));
+            return const_iterator(small_map_->find(key));
         } else {
-            return const_iterator(big_map_.find(key));
+            return const_iterator(big_map_->find(key));
         }
     }
 
     inline iterator find(const index_type& index) {
         assert(!Tristate());
         if (SmallMode()) {
-            return iterator(small_map_.find(index));
+            return iterator(small_map_->find(index));
         } else {
-            return iterator(big_map_.find(index));
+            return iterator(big_map_->find(index));
         }
     }
 
     inline const_iterator find(const index_type& index) const {
         assert(!Tristate());
         if (SmallMode()) {
-            return const_iterator(const_small_map_.find(index));
+            return const_iterator(static_cast<const SmallMap*>(small_map_)->find(index));
         } else {
-            return const_iterator(const_big_map_.find(index));
+            return const_iterator(static_cast<const BigMap*>(big_map_)->find(index));
         }
     }
 
@@ -514,10 +720,10 @@ class BothRangeMap {
         assert(!Tristate());
         if (SmallMode()) {
             assert(hint.SmallMode());
-            small_map_.insert(hint.small_it_, value);
+            small_map_->insert(hint.small_it_, value);
         } else {
             assert(hint.BigMode());
-            big_map_.insert(hint.big_it_, value);
+            big_map_->insert(hint.big_it_, value);
         }
     }
 
@@ -525,25 +731,25 @@ class BothRangeMap {
     iterator split(const iterator whole_it, const index_type& index, const SplitOp& split_op) {
         assert(!Tristate());
         if (SmallMode()) {
-            return small_map_.split(whole_it.small_it_, index, split_op);
+            return small_map_->split(whole_it.small_it_, index, split_op);
         } else {
-            return big_map_.split(whole_it.big_it_, index, split_op);
+            return big_map_->split(whole_it.big_it_, index, split_op);
         }
     }
 
     inline iterator lower_bound(const key_type& key) {
         if (SmallMode()) {
-            return iterator(small_map_.lower_bound(key));
+            return iterator(small_map_->lower_bound(key));
         } else {
-            return iterator(big_map_.lower_bound(key));
+            return iterator(big_map_->lower_bound(key));
         }
     }
 
     inline const_iterator lower_bound(const key_type& key) const {
         if (SmallMode()) {
-            return const_iterator(small_map_.lower_bound(key));
+            return const_iterator(small_map_->lower_bound(key));
         } else {
-            return const_iterator(big_map_.lower_bound(key));
+            return const_iterator(big_map_->lower_bound(key));
         }
     }
 
@@ -551,10 +757,10 @@ class BothRangeMap {
     inline iterator overwrite_range(const iterator& lower, Value&& value) {
         if (SmallMode()) {
             assert(lower.SmallMode());
-            return small_map_.overwrite_range(lower.small_it_, std::forward<Value>(value));
+            return small_map_->overwrite_range(lower.small_it_, std::forward<Value>(value));
         } else {
             assert(lower.BigMode());
-            return big_map_.overwrite_range(lower.big_it_, std::forward<Value>(value));
+            return big_map_->overwrite_range(lower.big_it_, std::forward<Value>(value));
         }
     }
 
@@ -563,41 +769,38 @@ class BothRangeMap {
     BothRangeMapMode GetMode() const { return mode_; }
     const small_map& GetSmallMap() const {
         assert(SmallMode());
-        return small_map_;
+        return *small_map_;
     }
     small_map& GetSmallMap() {
         assert(SmallMode());
-        return small_map_;
+        return *small_map_;
     }
     const big_map& GetBigMap() const {
         assert(BigMode());
-        return big_map_;
+        return *big_map_;
     }
     big_map& GetBigMap() {
         assert(BigMode());
-        return big_map_;
+        return *big_map_;
     }
-    BothRangeMap() : const_big_map_(big_map_), const_small_map_(small_map_), mode_(BothRangeMapMode::kBig) {}
-    BothRangeMap(index_type limit)
-        : big_map_(),
-          small_map_(limit <= N ? limit : 0),
-          const_big_map_(big_map_),
-          const_small_map_(small_map_),
-          mode_(limit <= N ? BothRangeMapMode::kSmall : BothRangeMapMode::kBig) {}
+    BothRangeMap() = delete;
+    BothRangeMap(index_type limit) : mode_(ComputeMode(limit)), big_map_(MakeBigMap()), small_map_(MakeSmallMap(limit)) {}
 
     inline bool empty() const {
         if (SmallMode()) {
-            return small_map_.empty();
+            return small_map_->empty();
         } else {
-            return big_map_.empty();
+            assert(BigMode());
+            return big_map_->empty();
         }
     }
 
     inline size_t size() const {
         if (SmallMode()) {
-            return small_map_.size();
+            return small_map_->size();
         } else {
-            return big_map_.size();
+            assert(BigMode());
+            return big_map_->size();
         }
     }
 
@@ -606,11 +809,29 @@ class BothRangeMap {
     inline bool Tristate() const { return BothRangeMapMode::kTristate == mode_; }
 
   private:
-    BigMap big_map_;
-    SmallMap small_map_;
-    const BigMap& const_big_map_;
-    const SmallMap& const_small_map_;
-    BothRangeMapMode mode_;
+    static BothRangeMapMode ComputeMode(index_type size_limit) {
+        return size_limit <= N ? BothRangeMapMode::kSmall : BothRangeMapMode::kBig;
+    }
+    BigMap* MakeBigMap() {
+        if (BigMode()) {
+            return new (&backing_store) BigMap();
+        }
+        return nullptr;
+    }
+    SmallMap* MakeSmallMap(index_type limit) {
+        if (SmallMode()) {
+            return new (&backing_store) SmallMap(limit);
+        }
+        return nullptr;
+    }
+
+    BothRangeMapMode mode_ = BothRangeMapMode::kTristate;
+    // Must be after mode_ as they use mode for initialization logic
+    BigMap* big_map_ = nullptr;
+    SmallMap* small_map_ = nullptr;
+
+    using Storage = typename std::aligned_union<0, SmallMap, BigMap>::type;
+    Storage backing_store;
 };
 
 }  // namespace subresource_adapter

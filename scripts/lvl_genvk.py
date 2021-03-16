@@ -62,22 +62,29 @@ def makeGenOpts(args):
     # Features to include (list of features)
     features = args.feature
 
+    # Spirv elements to emit (list of extensions and capabilities)
+    emitSpirv = args.emitSpirv
+
     # Whether to disable inclusion protect in headers
     protect = args.protect
 
     # Output target directory
     directory = args.directory
 
+    # Path to generated files, particularly api.py
+    genpath = args.genpath
+
     # Descriptive names for various regexp patterns used to select
     # versions and extensions
-    allFeatures     = allExtensions = '.*'
-    noFeatures      = noExtensions = None
+    allFeatures     = allExtensions = allSpirv = '.*'
+    noFeatures      = noExtensions = noSpirv = None
 
     # Turn lists of names/patterns into matching regular expressions
     addExtensionsPat     = makeREstring(extensions, None)
     removeExtensionsPat  = makeREstring(removeExtensions, None)
     emitExtensionsPat    = makeREstring(emitExtensions, allExtensions)
     featuresPat          = makeREstring(features, allFeatures)
+    emitSpirvPat         = makeREstring(emitSpirv, allSpirv)
 
     # Copyright text prefixing all headers (list of strings).
     prefixStrings = [
@@ -122,6 +129,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'thread_safety.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -130,6 +138,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -146,6 +155,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'thread_safety.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -154,6 +164,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -170,6 +181,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'parameter_validation.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -178,6 +190,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -194,6 +207,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'parameter_validation.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -202,6 +216,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -218,6 +233,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'object_tracker.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -226,6 +242,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -243,6 +260,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'object_tracker.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -251,6 +269,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -268,6 +287,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_dispatch_table_helper.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -276,6 +296,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -291,6 +312,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'lvt_function_pointers.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -299,6 +321,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -315,6 +338,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'lvt_function_pointers.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -323,6 +347,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -339,6 +364,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_layer_dispatch_table.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -347,6 +373,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -362,6 +389,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_enum_string_helper.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -370,6 +398,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -386,6 +415,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_safe_struct.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -394,6 +424,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -410,6 +441,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_safe_struct.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -418,6 +450,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -434,6 +467,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_object_types.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -442,6 +476,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -458,6 +493,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_extension_helper.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -466,6 +502,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -482,6 +519,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'vk_typemap_helper.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -490,6 +528,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -500,14 +539,14 @@ def makeGenOpts(args):
             helper_file_type  = 'typemap_helper_header')
         ]
 
-    # Layer chassis related generation structs
-    # Options for layer chassis header
-    genOpts['chassis.h'] = [
-          LayerChassisOutputGenerator,
-          LayerChassisGeneratorOptions(
+    # Helper file generator options for corechecks_optick_instrumentation.h
+    genOpts['corechecks_optick_instrumentation.h'] = [
+          HelperFileOutputGenerator,
+          HelperFileOutputGeneratorOptions(
             conventions       = conventions,
-            filename          = 'chassis.h',
+            filename          = 'corechecks_optick_instrumentation.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -516,6 +555,58 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False,
+            helper_file_type  = 'optick_instrumentation_header')
+        ]
+
+    # Helper file generator options for corechecks_optick_instrumentation.cpp
+    genOpts['corechecks_optick_instrumentation.cpp'] = [
+          HelperFileOutputGenerator,
+          HelperFileOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'corechecks_optick_instrumentation.cpp',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False,
+            helper_file_type  = 'optick_instrumentation_source')
+        ]
+
+    # Layer chassis related generation structs
+    # Options for layer chassis header
+    genOpts['chassis.h'] = [
+          LayerChassisOutputGenerator,
+          LayerChassisGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'chassis.h',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -532,6 +623,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'chassis.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -540,6 +632,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -549,13 +642,15 @@ def makeGenOpts(args):
             expandEnumerants = False)
         ]
 
-    # Options for layer chassis dispatch source file
-    genOpts['layer_chassis_dispatch.cpp'] = [
-          LayerChassisDispatchOutputGenerator,
-          LayerChassisDispatchGeneratorOptions(
+    # Layer chassis related generation structs
+    # Options for layer chassis header
+    genOpts['chassis_dispatch_helper.h'] = [
+          LayerChassisOutputGenerator,
+          LayerChassisGeneratorOptions(
             conventions       = conventions,
-            filename          = 'layer_chassis_dispatch.cpp',
+            filename          = 'chassis_dispatch_helper.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -564,6 +659,35 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            helper_file_type  = 'layer_chassis_helper_header',
+            expandEnumerants = False)
+        ]
+
+
+
+    # Options for layer chassis dispatch source file
+    genOpts['layer_chassis_dispatch.cpp'] = [
+          LayerChassisDispatchOutputGenerator,
+          LayerChassisDispatchGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'layer_chassis_dispatch.cpp',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -580,6 +704,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'layer_chassis_dispatch.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -588,6 +713,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -604,6 +730,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'command_counter_helper.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -612,6 +739,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -628,6 +756,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'command_counter_helper.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -636,6 +765,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             apicall           = 'VKAPI_ATTR ',
             apientry          = 'VKAPI_CALL ',
@@ -652,6 +782,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'best_practices.cpp',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -660,6 +791,7 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -676,6 +808,7 @@ def makeGenOpts(args):
             conventions       = conventions,
             filename          = 'best_practices.h',
             directory         = directory,
+            genpath           = None,
             apiname           = 'vulkan',
             profile           = None,
             versions          = featuresPat,
@@ -684,6 +817,86 @@ def makeGenOpts(args):
             addExtensions     = addExtensionsPat,
             removeExtensions  = removeExtensionsPat,
             emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            protectFeature    = False,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False)
+        ]
+
+# Create an API generator and corresponding generator options based on
+# the requested target and command line options.
+    # Helper file generator options for synchronization_validation_types.h
+    genOpts['synchronization_validation_types.h'] = [
+          HelperFileOutputGenerator,
+          HelperFileOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'synchronization_validation_types.h',
+            directory         = directory,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            protectFeature    = False,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False,
+            helper_file_type  = 'synchronization_helper_header')
+        ]
+
+    genOpts['synchronization_validation_types.cpp'] = [
+          HelperFileOutputGenerator,
+          HelperFileOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'synchronization_validation_types.cpp',
+            directory         = directory,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = None,
+            prefixText        = prefixStrings + vkPrefixStrings,
+            protectFeature    = False,
+            apicall           = 'VKAPI_ATTR ',
+            apientry          = 'VKAPI_CALL ',
+            apientryp         = 'VKAPI_PTR *',
+            alignFuncParam    = 48,
+            expandEnumerants  = False,
+            helper_file_type  = 'synchronization_helper_source')
+        ]
+
+    # Options for spirv_validation_helper code-generated header
+    genOpts['spirv_validation_helper.cpp'] = [
+          SpirvValidationHelperOutputGenerator,
+          SpirvValidationHelperOutputGeneratorOptions(
+            conventions       = conventions,
+            filename          = 'spirv_validation_helper.cpp',
+            directory         = directory,
+            genpath           = None,
+            apiname           = 'vulkan',
+            profile           = None,
+            versions          = featuresPat,
+            emitversions      = featuresPat,
+            defaultExtensions = 'vulkan',
+            addExtensions     = addExtensionsPat,
+            removeExtensions  = removeExtensionsPat,
+            emitExtensions    = emitExtensionsPat,
+            emitSpirv         = emitSpirvPat,
             prefixText        = prefixStrings + vkPrefixStrings,
             protectFeature    = False,
             apicall           = 'VKAPI_ATTR ',
@@ -705,7 +918,7 @@ def makeGenOpts(args):
 def genTarget(args):
     global genOpts
 
-    # Create generator options with specified parameters
+    # Create generator options with parameters specified on command line
     makeGenOpts(args)
 
     if (args.target in genOpts.keys()):
@@ -720,20 +933,18 @@ def genTarget(args):
             write('* options.addExtensions     =', options.addExtensions, file=sys.stderr)
             write('* options.removeExtensions  =', options.removeExtensions, file=sys.stderr)
             write('* options.emitExtensions    =', options.emitExtensions, file=sys.stderr)
+            write('* options.emitSpirv         =', options.emitSpirv, file=sys.stderr)
 
-        startTimer(args.time)
         gen = createGenerator(errFile=errWarn,
                               warnFile=errWarn,
                               diagFile=diag)
-        reg.setGenerator(gen)
-        reg.apiGen(options)
-
         if not args.quiet:
             write('* Generated', options.filename, file=sys.stderr)
-        endTimer(args.time, '* Time to generate ' + options.filename + ' =')
+        return (gen, options)
     else:
         write('No generator options for unknown target:',
               args.target, file=sys.stderr)
+        return none
 
 # -feature name
 # -extension name
@@ -757,6 +968,9 @@ if __name__ == '__main__':
     parser.add_argument('-feature', action='append',
                         default=[],
                         help='Specify a core API feature name or names to add to targets')
+    parser.add_argument('-emitSpirv', action='append',
+                        default=[],
+                        help='Specify spirv extensions or capabilities to emit in targets')
     parser.add_argument('-debug', action='store_true',
                         help='Enable debugging')
     parser.add_argument('-dump', action='store_true',
@@ -777,7 +991,9 @@ if __name__ == '__main__':
     parser.add_argument('-time', action='store_true',
                         help='Enable timing')
     parser.add_argument('-validate', action='store_true',
-                        help='Enable group validation')
+                        help='Enable XML group validation')
+    parser.add_argument('-genpath', action='store', default='gen',
+                        help='Path to generated files')
     parser.add_argument('-o', action='store', dest='directory',
                         default='.',
                         help='Create target and related files in specified directory')
@@ -818,6 +1034,7 @@ if __name__ == '__main__':
     from lvt_file_generator import LvtFileOutputGenerator, LvtFileOutputGeneratorOptions
     from command_counter_generator import CommandCounterOutputGenerator, CommandCounterOutputGeneratorOptions
     from best_practices_generator import BestPracticesOutputGenerator, BestPracticesOutputGeneratorOptions
+    from spirv_validation_generator import SpirvValidationHelperOutputGenerator, SpirvValidationHelperOutputGeneratorOptions
 
     # Temporary workaround for vkconventions python2 compatibility
     import abc; abc.ABC = abc.ABCMeta('ABC', (object,), {})
@@ -826,27 +1043,6 @@ if __name__ == '__main__':
     # This splits arguments which are space-separated lists
     args.feature = [name for arg in args.feature for name in arg.split()]
     args.extension = [name for arg in args.extension for name in arg.split()]
-
-    # Load & parse registry
-    reg = Registry()
-
-    startTimer(args.time)
-    tree = etree.parse(args.registry)
-    endTimer(args.time, '* Time to make ElementTree =')
-
-    if args.debug:
-        pdb.run('reg.loadElementTree(tree)')
-    else:
-        startTimer(args.time)
-        reg.loadElementTree(tree)
-        endTimer(args.time, '* Time to parse ElementTree =')
-
-    if (args.validate):
-        reg.validateGroups()
-
-    if (args.dump):
-        write('* Dumping registry to regdump.txt', file=sys.stderr)
-        reg.dumpReg(filehandle = open('regdump.txt', 'w', encoding='utf-8'))
 
     # create error/warning & diagnostic files
     if (args.errfile):
@@ -859,12 +1055,35 @@ if __name__ == '__main__':
     else:
         diag = None
 
+    # Create the API generator & generator options
+    (gen, options) = genTarget(args)
+
+    # Create the registry object with the specified generator and generator
+    # options. The options are set before XML loading as they may affect it.
+    reg = Registry(gen, options)
+
+    # Parse the specified registry XML into an ElementTree object
+    startTimer(args.time)
+    tree = etree.parse(args.registry)
+    endTimer(args.time, '* Time to make ElementTree =')
+
+    # Load the XML tree into the registry object
+    startTimer(args.time)
+    reg.loadElementTree(tree)
+    endTimer(args.time, '* Time to parse ElementTree =')
+
+    if (args.validate):
+        reg.validateGroups()
+
+    if (args.dump):
+        write('* Dumping registry to regdump.txt', file=sys.stderr)
+        reg.dumpReg(filehandle = open('regdump.txt', 'w', encoding='utf-8'))
+
+    # Finally, use the output generator to create the requested target
     if (args.debug):
-        pdb.run('genTarget(args)')
-    elif (args.profile):
-        import cProfile, pstats
-        cProfile.run('genTarget(args)', 'profile.txt')
-        p = pstats.Stats('profile.txt')
-        p.strip_dirs().sort_stats('time').print_stats(50)
+        pdb.run('reg.apiGen()')
     else:
+        startTimer(args.time)
+        reg.apiGen()
+        endTimer(args.time, '* Time to generate ' + options.filename + ' =')
         genTarget(args)

@@ -1,6 +1,6 @@
 # ~~~
-# Copyright (c) 2014-2020 Valve Corporation
-# Copyright (c) 2014-2020 LunarG, Inc.
+# Copyright (c) 2014-2021 Valve Corporation
+# Copyright (c) 2014-2021 LunarG, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,74 +72,38 @@ if(BUILD_LAYER_SUPPORT_FILES)
         generated/vk_object_types.h
         generated/vk_extension_helper.h
         generated/vk_typemap_helper.h)
-    install(FILES ${LAYER_UTIL_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(FILES ${LAYER_UTIL_FILES} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/vulkan)
 endif()
 
 set(TARGET_NAMES
     VkLayer_khronos_validation)
 
-if(BUILD_LAYERS)
-    # Install the layer json files
+# System-specific macro to create a library target.
+macro(AddVkLayer target LAYER_COMPILE_DEFINITIONS)
+    add_library(VkLayer_${target} SHARED ${ARGN})
+    set_target_properties(VkLayer_${target} PROPERTIES CXX_STANDARD ${VVL_CPP_STANDARD})
+    target_compile_definitions(VkLayer_${target} PUBLIC ${LAYER_COMPILE_DEFINITIONS})
+    target_link_libraries(VkLayer_${target} PRIVATE VkLayer_utils)
+
     if(WIN32)
-        if(CMAKE_GENERATOR MATCHES "^Visual Studio.*")
-            foreach(TARGET_NAME ${TARGET_NAMES})
-                install(FILES ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/${TARGET_NAME}.json DESTINATION ${CMAKE_INSTALL_LIBDIR})
-            endforeach()
-        else()
-            foreach(TARGET_NAME ${TARGET_NAMES})
-                install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.json DESTINATION ${CMAKE_INSTALL_LIBDIR})
-            endforeach()
-        endif()
-    elseif(UNIX) # UNIX includes APPLE
-        foreach(TARGET_NAME ${TARGET_NAMES})
-            install(FILES ${CMAKE_CURRENT_BINARY_DIR}/staging-json/${TARGET_NAME}.json
-                    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/vulkan/explicit_layer.d)
-        endforeach()
-    endif()
-endif()
-
-# System-specific macros to create a library target.
-if(WIN32)
-    macro(AddVkLayer target LAYER_COMPILE_DEFINITIONS)
-        file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/VkLayer_${target}.def DEF_FILE)
-        add_custom_target(copy-${target}-def-file ALL
-                          COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DEF_FILE} VkLayer_${target}.def
-                          VERBATIM)
-        set_target_properties(copy-${target}-def-file PROPERTIES FOLDER ${LAYERS_HELPER_FOLDER})
-
-        add_library(VkLayer_${target} SHARED ${ARGN} VkLayer_${target}.def)
-        target_compile_definitions(VkLayer_${target} PUBLIC ${LAYER_COMPILE_DEFINITIONS})
-        target_link_libraries(VkLayer_${target} PRIVATE VkLayer_utils)
-        add_dependencies(VkLayer_${target} VkLayer_utils)
-        install(TARGETS VkLayer_${target} DESTINATION ${CMAKE_INSTALL_LIBDIR})
-    endmacro()
-elseif(APPLE)
-    macro(AddVkLayer target LAYER_COMPILE_DEFINITIONS)
-        add_library(VkLayer_${target} SHARED ${ARGN})
-        target_compile_definitions(VkLayer_${target} PUBLIC ${LAYER_COMPILE_DEFINITIONS})
-        target_link_libraries(VkLayer_${target} PRIVATE VkLayer_utils)
-        add_dependencies(VkLayer_${target} VkLayer_utils)
+        target_sources(VkLayer_${target} PRIVATE VkLayer_${target}.def)
+        target_compile_definitions(VkLayer_${target} PUBLIC NOMINMAX)
+    elseif(APPLE)
         set_target_properties(VkLayer_${target}
                               PROPERTIES LINK_FLAGS
                                          "-Wl"
                                          INSTALL_RPATH
                                          "@loader_path/")
-        install(TARGETS VkLayer_${target} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
-    endmacro()
-else(UNIX AND NOT APPLE) # i.e.: Linux
-    macro(AddVkLayer target LAYER_COMPILE_DEFINITIONS)
-        add_library(VkLayer_${target} SHARED ${ARGN})
-        target_compile_definitions(VkLayer_${target} PUBLIC ${LAYER_COMPILE_DEFINITIONS})
-        target_link_libraries(VkLayer_${target} PRIVATE VkLayer_utils)
-        add_dependencies(VkLayer_${target} VkLayer_utils)
+    else(UNIX AND NOT APPLE) # i.e.: Linux
         set_target_properties(VkLayer_${target} PROPERTIES LINK_FLAGS "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/libVkLayer_${target}.map,-Bsymbolic,--exclude-libs,ALL")
-        install(TARGETS VkLayer_${target} DESTINATION ${CMAKE_INSTALL_LIBDIR})
-    endmacro()
-endif()
+    endif()
+
+    install(TARGETS VkLayer_${target} DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endmacro()
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/generated ${VulkanHeaders_INCLUDE_DIR})
 
-if(WIN32)
+if(MSVC)
     # Applies to all configurations
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
     # Avoid: fatal error C1128: number of sections exceeded object file format limit: compile with /bigobj
@@ -150,8 +114,17 @@ if(WIN32)
     # that constructor initializers are now fixed to clear the struct members.
     add_compile_options("$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,19>>:/wd4351>")
 else()
+    if(MINGW)
+        add_compile_options("-Wa,-mbig-obj")
+    endif()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpointer-arith -Wno-unused-function -Wno-sign-compare")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Wno-unused-function -Wno-sign-compare")
+endif()
+
+
+if(ANNOTATED_SPEC_LINK)
+    message("-- ANNOTATED_SPEC_LINK is ${ANNOTATED_SPEC_LINK}")
+    add_definitions(-DANNOTATED_SPEC_LINK=${ANNOTATED_SPEC_LINK})
 endif()
 
 # Clang warns about unused const variables. Generated files may purposely contain unused consts, so silence this warning in Clang
@@ -163,18 +136,26 @@ set(CHASSIS_LIBRARY_FILES
     generated/chassis.cpp
     generated/layer_chassis_dispatch.cpp
     generated/command_counter_helper.cpp
+    generated/vk_safe_struct.cpp
+    generated/vk_safe_struct.h
+    layer_options.cpp
     state_tracker.cpp
     state_tracker.h
     image_layout_map.cpp
     image_layout_map.h
     range_vector.h
+    vk_layer_settings_ext.h
     subresource_adapter.cpp
-    subresource_adapter.h)
+    subresource_adapter.h
+    sync_utils.cpp
+    sync_utils.h)
 
 set(CORE_VALIDATION_LIBRARY_FILES
     core_validation.cpp
     core_validation.h
     core_validation_error_enums.h
+    core_error_location.h
+    core_error_location.cpp
     core_validation_types.h
     drawdispatch.cpp
     convert_to_renderpass2.cpp
@@ -184,7 +165,12 @@ set(CORE_VALIDATION_LIBRARY_FILES
     buffer_validation.h
     shader_validation.cpp
     shader_validation.h
+    sync_vuid_maps.cpp
+    sync_vuid_maps.h
+    generated/spirv_validation_helper.cpp
+    generated/synchronization_validation_types.cpp
     gpu_validation.cpp
+    generated/corechecks_optick_instrumentation.cpp
     xxhash.c)
 
 set(OBJECT_LIFETIMES_LIBRARY_FILES
@@ -222,8 +208,42 @@ set(GPU_UTILITY_LIBRARY_FILES
     gpu_utils.cpp
     gpu_utils.h)
 
+set(SYNC_VALIDATION_LIBRARY_FILES
+    synchronization_validation.cpp
+    synchronization_validation.h)
+
+# Validation Layer performance instrumentation support using Optick.
+# https://optick.dev/ https://github.com/bombomby/optick
+# To include Optick instrumentation:
+# 1) Download the Optick 1.3.1 release: https://github.com/bombomby/optick/releases/tag/1.3.1.0
+# 2) Copy the files from the src directory to external/optick.
+# 3) Run CMake configure with -DINSTRUMENT_OPTICK.
+set(OPTICK_SOURCE_DIR "${PROJECT_SOURCE_DIR}/external/optick")
+if(INSTRUMENT_OPTICK)
+    # Optick Instrumentation currently supported only on Microsoft toolchain.
+    if(MSVC)
+        if(IS_DIRECTORY "${OPTICK_SOURCE_DIR}")
+            file(GLOB OPTICK_SOURCE_FILES "${OPTICK_SOURCE_DIR}/*.*")
+            source_group("Optick Lib" FILES ${OPTICK_SOURCE_FILES})
+            # Disable GPU performance measurements (timestamp queries).
+            # Not needed for CPU Validation Layer measurements, but would be interesting to try someday.
+            # We'll need to map Vulkan API calls into the layer stack API entry points in order to build.
+            set(KHRONOS_LAYER_COMPILE_DEFINITIONS
+                -DINSTRUMENT_OPTICK
+                -DOPTICK_ENABLE_GPU_D3D12=0
+                -DOPTICK_ENABLE_GPU_VULKAN=0)
+        else()
+            message(WARNING "Optick sources not found at ${OPTICK_SOURCE_DIR} - continuing without instrumentation.")
+            set(INSTRUMENT_OPTICK OFF)
+        endif()
+    else()
+        message(WARNING "Optick instrumentation not supported on this platform - continuing without instrumentation.")
+        set(INSTRUMENT_OPTICK OFF)
+    endif()
+endif()
+
 if(BUILD_LAYERS)
-    AddVkLayer(khronos_validation ""
+    AddVkLayer(khronos_validation "${KHRONOS_LAYER_COMPILE_DEFINITIONS}"
         ${CHASSIS_LIBRARY_FILES}
         ${CORE_VALIDATION_LIBRARY_FILES}
         ${OBJECT_LIFETIMES_LIBRARY_FILES}
@@ -232,11 +252,25 @@ if(BUILD_LAYERS)
         ${BEST_PRACTICES_LIBRARY_FILES}
         ${GPU_UTILITY_LIBRARY_FILES}
         ${GPU_ASSISTED_LIBRARY_FILES}
-        ${DEBUG_PRINTF_LIBRARY_FILES})
+        ${DEBUG_PRINTF_LIBRARY_FILES}
+        ${SYNC_VALIDATION_LIBRARY_FILES}
+        ${OPTICK_SOURCE_FILES})
+
+    # Force generation of the PDB file for Release builds.
+    # Note that CMake reduces inlining optimization levels for RelWithDebInfo builds.
+    if(MSVC)
+        target_compile_options(VkLayer_khronos_validation PRIVATE "$<$<CONFIG:Release>:/Zi>")
+        # Need to use this instead of target_link_options() for older versions of CMake.
+        target_link_libraries(VkLayer_khronos_validation PRIVATE "$<$<CONFIG:Release>:-DEBUG:FULL>")
+    endif()
 
     # Khronos validation additional dependencies
     target_include_directories(VkLayer_khronos_validation PRIVATE ${GLSLANG_SPIRV_INCLUDE_DIR})
     target_include_directories(VkLayer_khronos_validation PRIVATE ${SPIRV_TOOLS_INCLUDE_DIR})
+    target_include_directories(VkLayer_khronos_validation PRIVATE ${SPIRV_HEADERS_INCLUDE_DIR})
+    if(INSTRUMENT_OPTICK)
+        target_include_directories(VkLayer_khronos_validation PRIVATE ${OPTICK_SOURCE_DIR})
+    endif()
     target_link_libraries(VkLayer_khronos_validation PRIVATE ${SPIRV_TOOLS_LIBRARIES})
 
     # The output file needs Unix "/" separators or Windows "\" separators On top of that, Windows separators actually need to be doubled
@@ -286,4 +320,15 @@ if(BUILD_LAYERS)
                               COMMAND ${CMAKE_COMMAND} ${INSTALL_DEFINES} -P "${CMAKE_CURRENT_BINARY_DIR}/generator.cmake")
         endforeach()
     endif()
+
+    # Install the layer json files
+    foreach(TARGET_NAME ${TARGET_NAMES})
+        if(WIN32)
+            install(FILES $<TARGET_FILE_DIR:${TARGET_NAME}>/${TARGET_NAME}.json
+                    DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        elseif(UNIX)
+            install(FILES ${CMAKE_CURRENT_BINARY_DIR}/staging-json/${TARGET_NAME}.json
+                    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/vulkan/explicit_layer.d)
+        endif()
+    endforeach()
 endif()

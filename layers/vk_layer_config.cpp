@@ -40,6 +40,11 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#include <direct.h>
+#define GetCurrentDir _getcwd
+#else
+#include <unistd.h>
+#define GetCurrentDir getcwd
 #endif
 
 using std::string;
@@ -52,6 +57,7 @@ class ConfigFile {
     const char *GetOption(const string &option);
     void SetOption(const string &option, const string &value);
     string vk_layer_disables_env_var;
+    SettingsFileInfo settings_info{};
 
   private:
     bool file_is_parsed_;
@@ -77,6 +83,23 @@ string GetEnvironment(const char *variable) {
     string output = buffer;
     delete[] buffer;
     return output;
+#elif defined(__ANDROID__)
+    string command = "getprop " + string(variable);
+    FILE *pPipe = popen(command.c_str(), "r");
+    if (pPipe != nullptr) {
+        char value[256];
+        fgets(value, 256, pPipe);
+        pclose(pPipe);
+
+        // Make sure its not an empty line
+        if (strcspn(value, "\r\n") == 0) {
+            return "";
+        } else {
+            return string(value);
+        }
+    } else {
+        return "";
+    }
 #else
     return "";
 #endif
@@ -88,20 +111,23 @@ VK_LAYER_EXPORT const char *GetLayerEnvVar(const char *option) {
     return layer_config.vk_layer_disables_env_var.c_str();
 }
 
+VK_LAYER_EXPORT const SettingsFileInfo *GetLayerSettingsFileInfo() { return &layer_config.settings_info; }
+
 // If option is NULL or stdout, return stdout, otherwise try to open option
 // as a filename. If successful, return file handle, otherwise stdout
 VK_LAYER_EXPORT FILE *getLayerLogOutput(const char *option, const char *layer_name) {
     FILE *log_output = NULL;
-    if (!option || !strcmp("stdout", option))
+    if (!option || !strcmp("stdout", option)) {
         log_output = stdout;
-    else {
+    } else {
         log_output = fopen(option, "w");
         if (log_output == NULL) {
-            if (option)
+            if (option) {
                 std::cout << std::endl
                           << layer_name << " ERROR: Bad output filename specified: " << option << ". Writing to STDOUT instead"
                           << std::endl
                           << std::endl;
+            }
             log_output = stdout;
         }
     }
@@ -169,10 +195,11 @@ const char *ConfigFile::GetOption(const string &option) {
         ParseFile(settings_file.c_str());
     }
 
-    if ((it = value_map_.find(option)) == value_map_.end())
+    if ((it = value_map_.find(option)) == value_map_.end()) {
         return "";
-    else
+    } else {
         return it->second.c_str();
+    }
 }
 
 void ConfigFile::SetOption(const string &option, const string &val) {
@@ -184,35 +211,71 @@ void ConfigFile::SetOption(const string &option, const string &val) {
     value_map_[option] = val;
 }
 
+#if defined(WIN32)
+// Check for admin rights
+static inline bool IsHighIntegrity() {
+    HANDLE process_token;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_QUERY_SOURCE, &process_token)) {
+        // Maximum possible size of SID_AND_ATTRIBUTES is maximum size of a SID + size of attributes DWORD.
+        uint8_t mandatory_label_buffer[SECURITY_MAX_SID_SIZE + sizeof(DWORD)];
+        DWORD buffer_size;
+        if (GetTokenInformation(process_token, TokenIntegrityLevel, mandatory_label_buffer, sizeof(mandatory_label_buffer),
+                                &buffer_size) != 0) {
+            const TOKEN_MANDATORY_LABEL *mandatory_label = (const TOKEN_MANDATORY_LABEL *)mandatory_label_buffer;
+            const DWORD sub_authority_count = *GetSidSubAuthorityCount(mandatory_label->Label.Sid);
+            const DWORD integrity_level = *GetSidSubAuthority(mandatory_label->Label.Sid, sub_authority_count - 1);
+
+            CloseHandle(process_token);
+            return integrity_level > SECURITY_MANDATORY_MEDIUM_RID;
+        }
+
+        CloseHandle(process_token);
+    }
+
+    return false;
+}
+#endif
+
 string ConfigFile::FindSettings() {
     struct stat info;
 
 #if defined(WIN32)
-    HKEY hive;
-    LSTATUS err = RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Khronos\\Vulkan\\Settings", 0, KEY_READ, &hive);
-    if (err == ERROR_SUCCESS) {
-        char name[2048];
-        DWORD i = 0, name_size, type, value, value_size;
-        while (ERROR_SUCCESS == RegEnumValue(hive, i++, name, &(name_size = sizeof(name)), nullptr, &type,
-                                             reinterpret_cast<LPBYTE>(&value), &(value_size = sizeof(value)))) {
-            // Check if the registry entry is a dword with a value of zero
-            if (type != REG_DWORD || value != 0) {
-                continue;
+    // Look for VkConfig-specific settings location specified in the windows registry
+    HKEY key;
+
+    const std::array<HKEY, 2> hives = {DEFAULT_VK_REGISTRY_HIVE, SECONDARY_VK_REGISTRY_HIVE};
+    const size_t hives_to_check_count = IsHighIntegrity() ? 1 : hives.size();  // Admin checks only the default hive
+
+    for (size_t hive_index = 0; hive_index < hives_to_check_count; ++hive_index) {
+        LSTATUS err = RegOpenKeyEx(hives[hive_index], "Software\\Khronos\\Vulkan\\Settings", 0, KEY_READ, &key);
+        if (err == ERROR_SUCCESS) {
+            char name[2048];
+            DWORD i = 0, name_size, type, value, value_size;
+            while (ERROR_SUCCESS == RegEnumValue(key, i++, name, &(name_size = sizeof(name)), nullptr, &type,
+                                                 reinterpret_cast<LPBYTE>(&value), &(value_size = sizeof(value)))) {
+                // Check if the registry entry is a dword with a value of zero
+                if (type != REG_DWORD || value != 0) {
+                    continue;
+                }
+
+                // Check if this actually points to a file
+                if ((stat(name, &info) != 0) || !(info.st_mode & S_IFREG)) {
+                    continue;
+                }
+
+                // Use this file
+                RegCloseKey(key);
+                settings_info.source = kVkConfig;
+                settings_info.location = name;
+                return name;
             }
 
-            // Check if this actually points to a file
-            if ((stat(name, &info) != 0) || !(info.st_mode & S_IFREG)) {
-                continue;
-            }
-
-            // Use this file
-            RegCloseKey(hive);
-            return name;
+            RegCloseKey(key);
         }
-
-        RegCloseKey(hive);
     }
+
 #else
+    // Look for VkConfig-specific settings location specified in a specific spot in the linux settings store
     string search_path = GetEnvironment("XDG_DATA_HOME");
     if (search_path == "") {
         search_path = GetEnvironment("HOME");
@@ -220,28 +283,40 @@ string ConfigFile::FindSettings() {
             search_path += "/.local/share";
         }
     }
-
     // Use the vk_layer_settings.txt file from here, if it is present
     if (search_path != "") {
         string home_file = search_path + "/vulkan/settings.d/vk_layer_settings.txt";
         if (stat(home_file.c_str(), &info) == 0) {
             if (info.st_mode & S_IFREG) {
+                settings_info.source = kVkConfig;
+                settings_info.location = home_file;
                 return home_file;
             }
         }
     }
 
 #endif
-
+    // Look for an enviornment variable override for the settings file location
     string env_path = GetEnvironment("VK_LAYER_SETTINGS_PATH");
 
     // If the path exists use it, else use vk_layer_settings
     if (stat(env_path.c_str(), &info) == 0) {
-        // If this is a directory, look for vk_layer_settings within the directory
+        // If this is a directory, append settings file name
         if (info.st_mode & S_IFDIR) {
-            return env_path + "/vk_layer_settings.txt";
+            env_path.append("/vk_layer_settings.txt");
         }
+        settings_info.source = kEnvVar;
+        settings_info.location = env_path;
         return env_path;
+    }
+
+    // Default -- use the current working directory for the settings file location
+    settings_info.source = kLocal;
+    char buff[512];
+    auto buf_ptr = GetCurrentDir(buff, 512);
+    if (buf_ptr) {
+        settings_info.location = buf_ptr;
+        settings_info.location.append("\\vk_layer_settings.txt");
     }
     return "vk_layer_settings.txt";
 }
@@ -249,18 +324,21 @@ string ConfigFile::FindSettings() {
 void ConfigFile::ParseFile(const char *filename) {
     file_is_parsed_ = true;
 
-    // extract option = value pairs from a file
+    // Extract option = value pairs from a file
     std::ifstream file(filename);
-    for (string line; std::getline(file, line);) {
-        // discard comments, which start with '#'
-        const auto comments_pos = line.find_first_of('#');
-        if (comments_pos != string::npos) line.erase(comments_pos);
+    if (file.good()) {
+        settings_info.file_found = true;
+        for (string line; std::getline(file, line);) {
+            // discard comments, which start with '#'
+            const auto comments_pos = line.find_first_of('#');
+            if (comments_pos != string::npos) line.erase(comments_pos);
 
-        const auto value_pos = line.find_first_of('=');
-        if (value_pos != string::npos) {
-            const string option = string_trim(line.substr(0, value_pos));
-            const string value = string_trim(line.substr(value_pos + 1));
-            value_map_[option] = value;
+            const auto value_pos = line.find_first_of('=');
+            if (value_pos != string::npos) {
+                const string option = string_trim(line.substr(0, value_pos));
+                const string value = string_trim(line.substr(value_pos + 1));
+                value_map_[option] = value;
+            }
         }
     }
 }
@@ -336,3 +414,24 @@ VK_LAYER_EXPORT void PrintMessageType(VkFlags vk_flags, char *msg_flags) {
         strcat(msg_flags, "PERF");
     }
 }
+
+// This catches before dlopen fails if the default Android-26 layers are being used and attempted to be ran on Android 25 or below
+#if defined(__ANDROID__)
+#include "android_ndk_types.h"  // get AHB_VALIDATION_SUPPORT macro
+void __attribute__((constructor)) CheckAndroidVersion();
+void CheckAndroidVersion() {
+#ifdef AHB_VALIDATION_SUPPORT
+    string version_env = GetEnvironment("ro.build.version.sdk");
+    int target_version = atoi(version_env.c_str());
+
+    // atoi returns 0 if GetEnvironment fails and don't want false positive errors
+    if ((target_version != 0) && (target_version < 26)) {
+        LOGCONSOLE(
+            "ERROR - Targeted Android version is %d and needs to be 26 or above. Please read "
+            "https://github.com/KhronosGroup/Vulkan-ValidationLayers/blob/master/BUILD.md for how to build the Validation Layers "
+            "for Android 25 and below",
+            target_version);
+    }
+#endif  // AHB_VALIDATION_SUPPORT
+}
+#endif  // defined(__ANDROID__)

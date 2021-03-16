@@ -84,16 +84,16 @@ bool ObjectLifetimes::ValidateAnonymousObject(uint64_t object_handle, VkObjectTy
 
 void ObjectLifetimes::AllocateCommandBuffer(const VkCommandPool command_pool, const VkCommandBuffer command_buffer,
                                             VkCommandBufferLevel level) {
-    auto pNewObjNode = std::make_shared<ObjTrackState>();
-    pNewObjNode->object_type = kVulkanObjectTypeCommandBuffer;
-    pNewObjNode->handle = HandleToUint64(command_buffer);
-    pNewObjNode->parent_object = HandleToUint64(command_pool);
+    auto new_obj_node = std::make_shared<ObjTrackState>();
+    new_obj_node->object_type = kVulkanObjectTypeCommandBuffer;
+    new_obj_node->handle = HandleToUint64(command_buffer);
+    new_obj_node->parent_object = HandleToUint64(command_pool);
     if (level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
-        pNewObjNode->status = OBJSTATUS_COMMAND_BUFFER_SECONDARY;
+        new_obj_node->status = OBJSTATUS_COMMAND_BUFFER_SECONDARY;
     } else {
-        pNewObjNode->status = OBJSTATUS_NONE;
+        new_obj_node->status = OBJSTATUS_NONE;
     }
-    InsertObject(object_map[kVulkanObjectTypeCommandBuffer], command_buffer, kVulkanObjectTypeCommandBuffer, pNewObjNode);
+    InsertObject(object_map[kVulkanObjectTypeCommandBuffer], command_buffer, kVulkanObjectTypeCommandBuffer, new_obj_node);
     num_objects[kVulkanObjectTypeCommandBuffer]++;
     num_total_objects++;
 }
@@ -103,11 +103,11 @@ bool ObjectLifetimes::ValidateCommandBuffer(VkCommandPool command_pool, VkComman
     uint64_t object_handle = HandleToUint64(command_buffer);
     auto iter = object_map[kVulkanObjectTypeCommandBuffer].find(object_handle);
     if (iter != object_map[kVulkanObjectTypeCommandBuffer].end()) {
-        auto pNode = iter->second;
+        auto node = iter->second;
 
-        if (pNode->parent_object != HandleToUint64(command_pool)) {
+        if (node->parent_object != HandleToUint64(command_pool)) {
             // We know that the parent *must* be a command pool
-            const auto parent_pool = CastFromUint64<VkCommandPool>(pNode->parent_object);
+            const auto parent_pool = CastFromUint64<VkCommandPool>(node->parent_object);
             LogObjectList objlist(command_buffer);
             objlist.add(parent_pool);
             objlist.add(command_pool);
@@ -124,12 +124,12 @@ bool ObjectLifetimes::ValidateCommandBuffer(VkCommandPool command_pool, VkComman
 }
 
 void ObjectLifetimes::AllocateDescriptorSet(VkDescriptorPool descriptor_pool, VkDescriptorSet descriptor_set) {
-    auto pNewObjNode = std::make_shared<ObjTrackState>();
-    pNewObjNode->object_type = kVulkanObjectTypeDescriptorSet;
-    pNewObjNode->status = OBJSTATUS_NONE;
-    pNewObjNode->handle = HandleToUint64(descriptor_set);
-    pNewObjNode->parent_object = HandleToUint64(descriptor_pool);
-    InsertObject(object_map[kVulkanObjectTypeDescriptorSet], descriptor_set, kVulkanObjectTypeDescriptorSet, pNewObjNode);
+    auto new_obj_node = std::make_shared<ObjTrackState>();
+    new_obj_node->object_type = kVulkanObjectTypeDescriptorSet;
+    new_obj_node->status = OBJSTATUS_NONE;
+    new_obj_node->handle = HandleToUint64(descriptor_set);
+    new_obj_node->parent_object = HandleToUint64(descriptor_pool);
+    InsertObject(object_map[kVulkanObjectTypeDescriptorSet], descriptor_set, kVulkanObjectTypeDescriptorSet, new_obj_node);
     num_objects[kVulkanObjectTypeDescriptorSet]++;
     num_total_objects++;
 
@@ -142,11 +142,11 @@ void ObjectLifetimes::AllocateDescriptorSet(VkDescriptorPool descriptor_pool, Vk
 bool ObjectLifetimes::ValidateDescriptorSet(VkDescriptorPool descriptor_pool, VkDescriptorSet descriptor_set) const {
     bool skip = false;
     uint64_t object_handle = HandleToUint64(descriptor_set);
-    auto dsItem = object_map[kVulkanObjectTypeDescriptorSet].find(object_handle);
-    if (dsItem != object_map[kVulkanObjectTypeDescriptorSet].end()) {
-        if (dsItem->second->parent_object != HandleToUint64(descriptor_pool)) {
+    auto ds_item = object_map[kVulkanObjectTypeDescriptorSet].find(object_handle);
+    if (ds_item != object_map[kVulkanObjectTypeDescriptorSet].end()) {
+        if (ds_item->second->parent_object != HandleToUint64(descriptor_pool)) {
             // We know that the parent *must* be a descriptor pool
-            const auto parent_pool = CastFromUint64<VkDescriptorPool>(dsItem->second->parent_object);
+            const auto parent_pool = CastFromUint64<VkDescriptorPool>(ds_item->second->parent_object);
             LogObjectList objlist(descriptor_set);
             objlist.add(parent_pool);
             objlist.add(descriptor_pool);
@@ -174,8 +174,12 @@ bool ObjectLifetimes::ValidateDescriptorWrite(VkWriteDescriptorSet const *desc, 
     if ((desc->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER) ||
         (desc->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER)) {
         for (uint32_t idx2 = 0; idx2 < desc->descriptorCount; ++idx2) {
-            skip |= ValidateObject(desc->pTexelBufferView[idx2], kVulkanObjectTypeBufferView, false,
-                                   "VUID-VkWriteDescriptorSet-descriptorType-00323", "VUID-VkWriteDescriptorSet-commonparent");
+            skip |= ValidateObject(desc->pTexelBufferView[idx2], kVulkanObjectTypeBufferView, true,
+                                   "VUID-VkWriteDescriptorSet-descriptorType-02994", "VUID-VkWriteDescriptorSet-commonparent");
+            if (!null_descriptor_enabled && desc->pTexelBufferView[idx2] == VK_NULL_HANDLE) {
+                skip |= LogError(desc->dstSet, "VUID-VkWriteDescriptorSet-descriptorType-02995",
+                                 "VkWriteDescriptorSet: texel buffer view must not be VK_NULL_HANDLE.");
+            }
         }
     }
 
@@ -183,8 +187,12 @@ bool ObjectLifetimes::ValidateDescriptorWrite(VkWriteDescriptorSet const *desc, 
         (desc->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) || (desc->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) ||
         (desc->descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)) {
         for (uint32_t idx3 = 0; idx3 < desc->descriptorCount; ++idx3) {
-            skip |= ValidateObject(desc->pImageInfo[idx3].imageView, kVulkanObjectTypeImageView, false,
-                                   "VUID-VkWriteDescriptorSet-descriptorType-00326", "VUID-VkDescriptorImageInfo-commonparent");
+            skip |= ValidateObject(desc->pImageInfo[idx3].imageView, kVulkanObjectTypeImageView, true,
+                                   "VUID-VkWriteDescriptorSet-descriptorType-02996", "VUID-VkDescriptorImageInfo-commonparent");
+            if (!null_descriptor_enabled && desc->pImageInfo[idx3].imageView == VK_NULL_HANDLE) {
+                skip |= LogError(desc->dstSet, "VUID-VkWriteDescriptorSet-descriptorType-02997",
+                                 "VkWriteDescriptorSet: image view must not be VK_NULL_HANDLE.");
+            }
         }
     }
 
@@ -193,15 +201,19 @@ bool ObjectLifetimes::ValidateDescriptorWrite(VkWriteDescriptorSet const *desc, 
         (desc->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
         (desc->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)) {
         for (uint32_t idx4 = 0; idx4 < desc->descriptorCount; ++idx4) {
-            skip |= ValidateObject(desc->pBufferInfo[idx4].buffer, kVulkanObjectTypeBuffer, false,
+            skip |= ValidateObject(desc->pBufferInfo[idx4].buffer, kVulkanObjectTypeBuffer, true,
                                    "VUID-VkDescriptorBufferInfo-buffer-parameter", kVUIDUndefined);
+            if (!null_descriptor_enabled && desc->pBufferInfo[idx4].buffer == VK_NULL_HANDLE) {
+                skip |= LogError(desc->dstSet, "VUID-VkDescriptorBufferInfo-buffer-02998",
+                                 "VkWriteDescriptorSet: buffer must not be VK_NULL_HANDLE.");
+            }
         }
     }
 
     if (desc->descriptorType == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
-        const auto *accInfo = lvl_find_in_chain<VkWriteDescriptorSetAccelerationStructureKHR>(desc->pNext);
+        const auto *acc_info = LvlFindInChain<VkWriteDescriptorSetAccelerationStructureKHR>(desc->pNext);
         for (uint32_t idx5 = 0; idx5 < desc->descriptorCount; ++idx5) {
-            skip |= ValidateObject(accInfo->pAccelerationStructures[idx5], kVulkanObjectTypeAccelerationStructureKHR, false,
+            skip |= ValidateObject(acc_info->pAccelerationStructures[idx5], kVulkanObjectTypeAccelerationStructureKHR, true,
                                    "VUID-VkWriteDescriptorSetAccelerationStructureKHR-pAccelerationStructures-parameter",
                                    kVUIDUndefined);
         }
@@ -244,12 +256,12 @@ void ObjectLifetimes::CreateQueue(VkQueue vkObj) {
 
 void ObjectLifetimes::CreateSwapchainImageObject(VkImage swapchain_image, VkSwapchainKHR swapchain) {
     if (!swapchainImageMap.contains(HandleToUint64(swapchain_image))) {
-        auto pNewObjNode = std::make_shared<ObjTrackState>();
-        pNewObjNode->object_type = kVulkanObjectTypeImage;
-        pNewObjNode->status = OBJSTATUS_NONE;
-        pNewObjNode->handle = HandleToUint64(swapchain_image);
-        pNewObjNode->parent_object = HandleToUint64(swapchain);
-        InsertObject(swapchainImageMap, swapchain_image, kVulkanObjectTypeImage, pNewObjNode);
+        auto new_obj_node = std::make_shared<ObjTrackState>();
+        new_obj_node->object_type = kVulkanObjectTypeImage;
+        new_obj_node->status = OBJSTATUS_NONE;
+        new_obj_node->handle = HandleToUint64(swapchain_image);
+        new_obj_node->parent_object = HandleToUint64(swapchain);
+        InsertObject(swapchainImageMap, swapchain_image, kVulkanObjectTypeImage, new_obj_node);
     }
 }
 
@@ -288,20 +300,19 @@ bool ObjectLifetimes::ReportLeakedDeviceObjects(VkDevice device, VulkanObjectTyp
 bool ObjectLifetimes::PreCallValidateDestroyInstance(VkInstance instance, const VkAllocationCallbacks *pAllocator) const {
     bool skip = false;
 
-    // We validate here for coverage, though we'd not have made it this for with a bad instance.
+    // We validate here for coverage, though we'd not have made it this far with a bad instance.
     skip |= ValidateObject(instance, kVulkanObjectTypeInstance, true, "VUID-vkDestroyInstance-instance-parameter", kVUIDUndefined);
 
-    // Validate that child devices have been destroyed
     auto snapshot = object_map[kVulkanObjectTypeDevice].snapshot();
     for (const auto &iit : snapshot) {
-        auto pNode = iit.second;
+        auto node = iit.second;
 
-        VkDevice device = reinterpret_cast<VkDevice>(pNode->handle);
-        VkDebugReportObjectTypeEXT debug_object_type = get_debug_report_enum[pNode->object_type];
+        VkDevice device = reinterpret_cast<VkDevice>(node->handle);
+        VkDebugReportObjectTypeEXT debug_object_type = get_debug_report_enum[node->object_type];
 
         skip |= LogError(device, kVUID_ObjectTracker_ObjectLeak, "OBJ ERROR : %s object %s has not been destroyed.",
                          string_VkDebugReportObjectTypeEXT(debug_object_type),
-                         report_data->FormatHandle(ObjTrackStateTypedHandle(*pNode)).c_str());
+                         report_data->FormatHandle(ObjTrackStateTypedHandle(*node)).c_str());
 
         // Throw errors if any device objects belonging to this instance have not been destroyed
         auto device_layer_data = GetLayerDataPtr(get_dispatch_key(device), layer_data_map);
@@ -313,9 +324,8 @@ bool ObjectLifetimes::PreCallValidateDestroyInstance(VkInstance instance, const 
                                       "VUID-vkDestroyInstance-instance-00631");
     }
 
-    // Throw errors if any instance objects created on this instance have not been destroyed
-    ValidateDestroyObject(instance, kVulkanObjectTypeInstance, pAllocator, "VUID-vkDestroyInstance-instance-00630",
-                          "VUID-vkDestroyInstance-instance-00631");
+    skip |= ValidateDestroyObject(instance, kVulkanObjectTypeInstance, pAllocator, "VUID-vkDestroyInstance-instance-00630",
+                                  "VUID-vkDestroyInstance-instance-00631");
 
     // Report any remaining instance objects
     skip |= ReportUndestroyedInstanceObjects(instance, "VUID-vkDestroyInstance-instance-00629");
@@ -344,16 +354,16 @@ void ObjectLifetimes::PreCallRecordDestroyInstance(VkInstance instance, const Vk
     // Destroy physical devices
     auto snapshot = object_map[kVulkanObjectTypePhysicalDevice].snapshot();
     for (const auto &iit : snapshot) {
-        auto pNode = iit.second;
-        VkPhysicalDevice physical_device = reinterpret_cast<VkPhysicalDevice>(pNode->handle);
+        auto node = iit.second;
+        VkPhysicalDevice physical_device = reinterpret_cast<VkPhysicalDevice>(node->handle);
         RecordDestroyObject(physical_device, kVulkanObjectTypePhysicalDevice);
     }
 
     // Destroy child devices
     auto snapshot2 = object_map[kVulkanObjectTypeDevice].snapshot();
     for (const auto &iit : snapshot2) {
-        auto pNode = iit.second;
-        VkDevice device = reinterpret_cast<VkDevice>(pNode->handle);
+        auto node = iit.second;
+        VkDevice device = reinterpret_cast<VkDevice>(node->handle);
         DestroyLeakedInstanceObjects();
 
         RecordDestroyObject(device, kVulkanObjectTypeDevice);
@@ -446,8 +456,8 @@ bool ObjectLifetimes::PreCallValidateResetDescriptorPool(VkDevice device, VkDesc
 
     auto itr = object_map[kVulkanObjectTypeDescriptorPool].find(HandleToUint64(descriptorPool));
     if (itr != object_map[kVulkanObjectTypeDescriptorPool].end()) {
-        auto pPoolNode = itr->second;
-        for (auto set : *pPoolNode->child_objects) {
+        auto pool_node = itr->second;
+        for (auto set : *pool_node->child_objects) {
             skip |= ValidateDestroyObject((VkDescriptorSet)set, kVulkanObjectTypeDescriptorSet, nullptr, kVUIDUndefined,
                                           kVUIDUndefined);
         }
@@ -462,11 +472,11 @@ void ObjectLifetimes::PreCallRecordResetDescriptorPool(VkDevice device, VkDescri
     // our descriptorSet map.
     auto itr = object_map[kVulkanObjectTypeDescriptorPool].find(HandleToUint64(descriptorPool));
     if (itr != object_map[kVulkanObjectTypeDescriptorPool].end()) {
-        auto pPoolNode = itr->second;
-        for (auto set : *pPoolNode->child_objects) {
+        auto pool_node = itr->second;
+        for (auto set : *pool_node->child_objects) {
             RecordDestroyObject((VkDescriptorSet)set, kVulkanObjectTypeDescriptorSet);
         }
-        pPoolNode->child_objects->clear();
+        pool_node->child_objects->clear();
     }
 }
 
@@ -478,8 +488,8 @@ bool ObjectLifetimes::PreCallValidateBeginCommandBuffer(VkCommandBuffer command_
     if (begin_info) {
         auto iter = object_map[kVulkanObjectTypeCommandBuffer].find(HandleToUint64(command_buffer));
         if (iter != object_map[kVulkanObjectTypeCommandBuffer].end()) {
-            auto pNode = iter->second;
-            if ((begin_info->pInheritanceInfo) && (pNode->status & OBJSTATUS_COMMAND_BUFFER_SECONDARY) &&
+            auto node = iter->second;
+            if ((begin_info->pInheritanceInfo) && (node->status & OBJSTATUS_COMMAND_BUFFER_SECONDARY) &&
                 (begin_info->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT)) {
                 skip |=
                     ValidateObject(begin_info->pInheritanceInfo->framebuffer, kVulkanObjectTypeFramebuffer, true,
@@ -599,6 +609,30 @@ void ObjectLifetimes::PostCallRecordCreateInstance(const VkInstanceCreateInfo *p
     CreateObject(*pInstance, kVulkanObjectTypeInstance, pAllocator);
 }
 
+bool ObjectLifetimes::PreCallValidateCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
+                                                  const VkAllocationCallbacks *pAllocator, VkDevice *pDevice) const {
+    bool skip = false;
+    skip |= ValidateObject(physicalDevice, kVulkanObjectTypePhysicalDevice, false, "VUID-vkCreateDevice-physicalDevice-parameter",
+                           kVUIDUndefined);
+
+    return skip;
+}
+
+void ObjectLifetimes::PostCallRecordCreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCreateInfo,
+                                                 const VkAllocationCallbacks *pAllocator, VkDevice *pDevice, VkResult result) {
+    if (result != VK_SUCCESS) return;
+    CreateObject(*pDevice, kVulkanObjectTypeDevice, pAllocator);
+
+    auto device_data = GetLayerDataPtr(get_dispatch_key(*pDevice), layer_data_map);
+    ValidationObject *validation_data = GetValidationObject(device_data->object_dispatch, LayerObjectTypeObjectTracker);
+    ObjectLifetimes *object_tracking = static_cast<ObjectLifetimes *>(validation_data);
+
+    object_tracking->device_createinfo_pnext = SafePnextCopy(pCreateInfo->pNext);
+    const auto *robustness2_features =
+        LvlFindInChain<VkPhysicalDeviceRobustness2FeaturesEXT>(object_tracking->device_createinfo_pnext);
+    object_tracking->null_descriptor_enabled = robustness2_features && robustness2_features->nullDescriptor;
+}
+
 bool ObjectLifetimes::PreCallValidateAllocateCommandBuffers(VkDevice device, const VkCommandBufferAllocateInfo *pAllocateInfo,
                                                             VkCommandBuffer *pCommandBuffers) const {
     bool skip = false;
@@ -702,15 +736,15 @@ bool ObjectLifetimes::PreCallValidateFreeDescriptorSets(VkDevice device, VkDescr
 void ObjectLifetimes::PreCallRecordFreeDescriptorSets(VkDevice device, VkDescriptorPool descriptorPool, uint32_t descriptorSetCount,
                                                       const VkDescriptorSet *pDescriptorSets) {
     auto lock = write_shared_lock();
-    std::shared_ptr<ObjTrackState> pPoolNode = nullptr;
+    std::shared_ptr<ObjTrackState> pool_node = nullptr;
     auto itr = object_map[kVulkanObjectTypeDescriptorPool].find(HandleToUint64(descriptorPool));
     if (itr != object_map[kVulkanObjectTypeDescriptorPool].end()) {
-        pPoolNode = itr->second;
+        pool_node = itr->second;
     }
     for (uint32_t i = 0; i < descriptorSetCount; i++) {
         RecordDestroyObject(pDescriptorSets[i], kVulkanObjectTypeDescriptorSet);
-        if (pPoolNode) {
-            pPoolNode->child_objects->erase(HandleToUint64(pDescriptorSets[i]));
+        if (pool_node) {
+            pool_node->child_objects->erase(HandleToUint64(pDescriptorSets[i]));
         }
     }
 }
@@ -726,8 +760,8 @@ bool ObjectLifetimes::PreCallValidateDestroyDescriptorPool(VkDevice device, VkDe
 
     auto itr = object_map[kVulkanObjectTypeDescriptorPool].find(HandleToUint64(descriptorPool));
     if (itr != object_map[kVulkanObjectTypeDescriptorPool].end()) {
-        auto pPoolNode = itr->second;
-        for (auto set : *pPoolNode->child_objects) {
+        auto pool_node = itr->second;
+        for (auto set : *pool_node->child_objects) {
             skip |= ValidateDestroyObject((VkDescriptorSet)set, kVulkanObjectTypeDescriptorSet, nullptr, kVUIDUndefined,
                                           kVUIDUndefined);
         }
@@ -742,11 +776,11 @@ void ObjectLifetimes::PreCallRecordDestroyDescriptorPool(VkDevice device, VkDesc
     auto lock = write_shared_lock();
     auto itr = object_map[kVulkanObjectTypeDescriptorPool].find(HandleToUint64(descriptorPool));
     if (itr != object_map[kVulkanObjectTypeDescriptorPool].end()) {
-        auto pPoolNode = itr->second;
-        for (auto set : *pPoolNode->child_objects) {
+        auto pool_node = itr->second;
+        for (auto set : *pool_node->child_objects) {
             RecordDestroyObject((VkDescriptorSet)set, kVulkanObjectTypeDescriptorSet);
         }
-        pPoolNode->child_objects->clear();
+        pool_node->child_objects->clear();
     }
     RecordDestroyObject(descriptorPool, kVulkanObjectTypeDescriptorPool);
 }
@@ -761,7 +795,7 @@ bool ObjectLifetimes::PreCallValidateDestroyCommandPool(VkDevice device, VkComma
     auto snapshot = object_map[kVulkanObjectTypeCommandBuffer].snapshot(
         [commandPool](std::shared_ptr<ObjTrackState> pNode) { return pNode->parent_object == HandleToUint64(commandPool); });
     for (const auto &itr : snapshot) {
-        auto pNode = itr.second;
+        auto node = itr.second;
         skip |= ValidateCommandBuffer(commandPool, reinterpret_cast<VkCommandBuffer>(itr.first));
         skip |= ValidateDestroyObject(reinterpret_cast<VkCommandBuffer>(itr.first), kVulkanObjectTypeCommandBuffer, nullptr,
                                       kVUIDUndefined, kVUIDUndefined);
@@ -783,8 +817,7 @@ void ObjectLifetimes::PreCallRecordDestroyCommandPool(VkDevice device, VkCommand
 }
 
 bool ObjectLifetimes::PreCallValidateGetPhysicalDeviceQueueFamilyProperties2(
-    VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount,
-    VkQueueFamilyProperties2KHR *pQueueFamilyProperties) const {
+    VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2 *pQueueFamilyProperties) const {
     return ValidateObject(physicalDevice, kVulkanObjectTypePhysicalDevice, false,
                           "VUID-vkGetPhysicalDeviceQueueFamilyProperties2-physicalDevice-parameter", kVUIDUndefined);
 }
@@ -797,10 +830,11 @@ bool ObjectLifetimes::PreCallValidateGetPhysicalDeviceQueueFamilyProperties2KHR(
 
 void ObjectLifetimes::PostCallRecordGetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice,
                                                                             uint32_t *pQueueFamilyPropertyCount,
-                                                                            VkQueueFamilyProperties2KHR *pQueueFamilyProperties) {}
+                                                                            VkQueueFamilyProperties2 *pQueueFamilyProperties) {}
 
-void ObjectLifetimes::PostCallRecordGetPhysicalDeviceQueueFamilyProperties2KHR(
-    VkPhysicalDevice physicalDevice, uint32_t *pQueueFamilyPropertyCount, VkQueueFamilyProperties2KHR *pQueueFamilyProperties) {}
+void ObjectLifetimes::PostCallRecordGetPhysicalDeviceQueueFamilyProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                                               uint32_t *pQueueFamilyPropertyCount,
+                                                                               VkQueueFamilyProperties2 *pQueueFamilyProperties) {}
 
 bool ObjectLifetimes::PreCallValidateGetPhysicalDeviceDisplayPropertiesKHR(VkPhysicalDevice physicalDevice,
                                                                            uint32_t *pPropertyCount,
@@ -853,8 +887,10 @@ void ObjectLifetimes::PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(VkPhy
                                                                            uint32_t *pPropertyCount,
                                                                            VkDisplayProperties2KHR *pProperties, VkResult result) {
     if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) return;
-    for (uint32_t index = 0; index < *pPropertyCount; ++index) {
-        CreateObject(pProperties[index].displayProperties.display, kVulkanObjectTypeDisplayKHR, nullptr);
+    if (pProperties) {
+        for (uint32_t index = 0; index < *pPropertyCount; ++index) {
+            CreateObject(pProperties[index].displayProperties.display, kVulkanObjectTypeDisplayKHR, nullptr);
+        }
     }
 }
 
@@ -874,37 +910,35 @@ void ObjectLifetimes::PostCallRecordGetDisplayModeProperties2KHR(VkPhysicalDevic
                                                                  uint32_t *pPropertyCount, VkDisplayModeProperties2KHR *pProperties,
                                                                  VkResult result) {
     if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) return;
-    for (uint32_t index = 0; index < *pPropertyCount; ++index) {
-        CreateObject(pProperties[index].displayModeProperties.displayMode, kVulkanObjectTypeDisplayModeKHR, nullptr);
+    if (pProperties) {
+        for (uint32_t index = 0; index < *pPropertyCount; ++index) {
+            CreateObject(pProperties[index].displayModeProperties.displayMode, kVulkanObjectTypeDisplayModeKHR, nullptr);
+        }
     }
 }
 
-bool ObjectLifetimes::PreCallValidateAcquirePerformanceConfigurationINTEL(
-    VkDevice device, const VkPerformanceConfigurationAcquireInfoINTEL *pAcquireInfo,
-    VkPerformanceConfigurationINTEL *pConfiguration) const {
-    bool skip = false;
-    skip |= ValidateObject(device, kVulkanObjectTypeDevice, false, "VUID-vkAcquirePerformanceConfigurationINTEL-device-parameter",
-                           kVUIDUndefined);
-
-    return skip;
+void ObjectLifetimes::PostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(VkPhysicalDevice physicalDevice,
+                                                                               uint32_t *pPropertyCount,
+                                                                               VkDisplayPlanePropertiesKHR *pProperties,
+                                                                               VkResult result) {
+    if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) return;
+    if (pProperties) {
+        for (uint32_t index = 0; index < *pPropertyCount; ++index) {
+            CreateObject(pProperties[index].currentDisplay, kVulkanObjectTypeDisplayKHR, nullptr);
+        }
+    }
 }
 
-bool ObjectLifetimes::PreCallValidateReleasePerformanceConfigurationINTEL(VkDevice device,
-                                                                          VkPerformanceConfigurationINTEL configuration) const {
-    bool skip = false;
-    skip |= ValidateObject(device, kVulkanObjectTypeDevice, false, "VUID-vkReleasePerformanceConfigurationINTEL-device-parameter",
-                           kVUIDUndefined);
-
-    return skip;
-}
-
-bool ObjectLifetimes::PreCallValidateQueueSetPerformanceConfigurationINTEL(VkQueue queue,
-                                                                           VkPerformanceConfigurationINTEL configuration) const {
-    bool skip = false;
-    skip |= ValidateObject(queue, kVulkanObjectTypeQueue, false, "VUID-vkQueueSetPerformanceConfigurationINTEL-queue-parameter",
-                           "VUID-vkQueueSetPerformanceConfigurationINTEL-commonparent");
-
-    return skip;
+void ObjectLifetimes::PostCallRecordGetPhysicalDeviceDisplayPlaneProperties2KHR(VkPhysicalDevice physicalDevice,
+                                                                                uint32_t *pPropertyCount,
+                                                                                VkDisplayPlaneProperties2KHR *pProperties,
+                                                                                VkResult result) {
+    if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) return;
+    if (pProperties) {
+        for (uint32_t index = 0; index < *pPropertyCount; ++index) {
+            CreateObject(pProperties[index].displayPlaneProperties.currentDisplay, kVulkanObjectTypeDisplayKHR, nullptr);
+        }
+    }
 }
 
 bool ObjectLifetimes::PreCallValidateCreateFramebuffer(VkDevice device, const VkFramebufferCreateInfo *pCreateInfo,
@@ -914,7 +948,7 @@ bool ObjectLifetimes::PreCallValidateCreateFramebuffer(VkDevice device, const Vk
     if (pCreateInfo) {
         skip |= ValidateObject(pCreateInfo->renderPass, kVulkanObjectTypeRenderPass, false,
                                "VUID-VkFramebufferCreateInfo-renderPass-parameter", "VUID-VkFramebufferCreateInfo-commonparent");
-        if ((pCreateInfo->flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR) == 0) {
+        if ((pCreateInfo->flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT) == 0) {
             for (uint32_t index1 = 0; index1 < pCreateInfo->attachmentCount; ++index1) {
                 skip |= ValidateObject(pCreateInfo->pAttachments[index1], kVulkanObjectTypeImageView, true, kVUIDUndefined,
                                        "VUID-VkFramebufferCreateInfo-commonparent");

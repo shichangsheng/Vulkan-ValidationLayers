@@ -4,9 +4,9 @@
 
 /***************************************************************************
  *
- * Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
+ * Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@
 
 #include "chassis.h"
 #include "best_practices_validation.h"
-void BestPractices::PostCallRecordvkCreateInstance(
+void BestPractices::PostCallRecordCreateInstance(
     const VkInstanceCreateInfo*                 pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkInstance*                                 pInstance,
@@ -40,12 +40,13 @@ void BestPractices::PostCallRecordvkCreateInstance(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumeratePhysicalDevices(
+void BestPractices::PostCallRecordEnumeratePhysicalDevices(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceCount,
     VkPhysicalDevice*                           pPhysicalDevices,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordEnumeratePhysicalDevices(instance, pPhysicalDeviceCount, pPhysicalDevices, result);
+    ManualPostCallRecordEnumeratePhysicalDevices(instance, pPhysicalDeviceCount, pPhysicalDevices, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_INITIALIZATION_FAILED};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
@@ -53,7 +54,7 @@ void BestPractices::PostCallRecordvkEnumeratePhysicalDevices(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceImageFormatProperties(
+void BestPractices::PostCallRecordGetPhysicalDeviceImageFormatProperties(
     VkPhysicalDevice                            physicalDevice,
     VkFormat                                    format,
     VkImageType                                 type,
@@ -70,13 +71,14 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceImageFormatProperties(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDevice(
+void BestPractices::PostCallRecordCreateDevice(
     VkPhysicalDevice                            physicalDevice,
     const VkDeviceCreateInfo*                   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkDevice*                                   pDevice,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice, result);
+    ManualPostCallRecordCreateDevice(physicalDevice, pCreateInfo, pAllocator, pDevice, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_INITIALIZATION_FAILED,VK_ERROR_EXTENSION_NOT_PRESENT,VK_ERROR_FEATURE_NOT_PRESENT,VK_ERROR_TOO_MANY_OBJECTS,VK_ERROR_DEVICE_LOST};
         static const std::vector<VkResult> success_codes = {};
@@ -84,7 +86,7 @@ void BestPractices::PostCallRecordvkCreateDevice(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumerateInstanceExtensionProperties(
+void BestPractices::PostCallRecordEnumerateInstanceExtensionProperties(
     const char*                                 pLayerName,
     uint32_t*                                   pPropertyCount,
     VkExtensionProperties*                      pProperties,
@@ -97,7 +99,7 @@ void BestPractices::PostCallRecordvkEnumerateInstanceExtensionProperties(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumerateDeviceExtensionProperties(
+void BestPractices::PostCallRecordEnumerateDeviceExtensionProperties(
     VkPhysicalDevice                            physicalDevice,
     const char*                                 pLayerName,
     uint32_t*                                   pPropertyCount,
@@ -111,7 +113,7 @@ void BestPractices::PostCallRecordvkEnumerateDeviceExtensionProperties(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumerateInstanceLayerProperties(
+void BestPractices::PostCallRecordEnumerateInstanceLayerProperties(
     uint32_t*                                   pPropertyCount,
     VkLayerProperties*                          pProperties,
     VkResult                                    result) {
@@ -123,7 +125,7 @@ void BestPractices::PostCallRecordvkEnumerateInstanceLayerProperties(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumerateDeviceLayerProperties(
+void BestPractices::PostCallRecordEnumerateDeviceLayerProperties(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkLayerProperties*                          pProperties,
@@ -136,7 +138,7 @@ void BestPractices::PostCallRecordvkEnumerateDeviceLayerProperties(
     }
 }
 
-void BestPractices::PostCallRecordvkQueueSubmit(
+void BestPractices::PostCallRecordQueueSubmit(
     VkQueue                                     queue,
     uint32_t                                    submitCount,
     const VkSubmitInfo*                         pSubmits,
@@ -150,7 +152,7 @@ void BestPractices::PostCallRecordvkQueueSubmit(
     }
 }
 
-void BestPractices::PostCallRecordvkQueueWaitIdle(
+void BestPractices::PostCallRecordQueueWaitIdle(
     VkQueue                                     queue,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordQueueWaitIdle(queue, result);
@@ -161,7 +163,7 @@ void BestPractices::PostCallRecordvkQueueWaitIdle(
     }
 }
 
-void BestPractices::PostCallRecordvkDeviceWaitIdle(
+void BestPractices::PostCallRecordDeviceWaitIdle(
     VkDevice                                    device,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordDeviceWaitIdle(device, result);
@@ -172,9 +174,22 @@ void BestPractices::PostCallRecordvkDeviceWaitIdle(
     }
 }
 
-// Skipping vkAllocateMemory for autogen as it has a manually created custom function or ignored.
+void BestPractices::PostCallRecordAllocateMemory(
+    VkDevice                                    device,
+    const VkMemoryAllocateInfo*                 pAllocateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDeviceMemory*                             pMemory,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordAllocateMemory(device, pAllocateInfo, pAllocator, pMemory, result);
+    ManualPostCallRecordAllocateMemory(device, pAllocateInfo, pAllocator, pMemory, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_INVALID_EXTERNAL_HANDLE,VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkAllocateMemory", result, error_codes, success_codes);
+    }
+}
 
-void BestPractices::PostCallRecordvkMapMemory(
+void BestPractices::PostCallRecordMapMemory(
     VkDevice                                    device,
     VkDeviceMemory                              memory,
     VkDeviceSize                                offset,
@@ -190,7 +205,7 @@ void BestPractices::PostCallRecordvkMapMemory(
     }
 }
 
-void BestPractices::PostCallRecordvkFlushMappedMemoryRanges(
+void BestPractices::PostCallRecordFlushMappedMemoryRanges(
     VkDevice                                    device,
     uint32_t                                    memoryRangeCount,
     const VkMappedMemoryRange*                  pMemoryRanges,
@@ -203,7 +218,7 @@ void BestPractices::PostCallRecordvkFlushMappedMemoryRanges(
     }
 }
 
-void BestPractices::PostCallRecordvkInvalidateMappedMemoryRanges(
+void BestPractices::PostCallRecordInvalidateMappedMemoryRanges(
     VkDevice                                    device,
     uint32_t                                    memoryRangeCount,
     const VkMappedMemoryRange*                  pMemoryRanges,
@@ -216,7 +231,7 @@ void BestPractices::PostCallRecordvkInvalidateMappedMemoryRanges(
     }
 }
 
-void BestPractices::PostCallRecordvkBindBufferMemory(
+void BestPractices::PostCallRecordBindBufferMemory(
     VkDevice                                    device,
     VkBuffer                                    buffer,
     VkDeviceMemory                              memory,
@@ -230,7 +245,7 @@ void BestPractices::PostCallRecordvkBindBufferMemory(
     }
 }
 
-void BestPractices::PostCallRecordvkBindImageMemory(
+void BestPractices::PostCallRecordBindImageMemory(
     VkDevice                                    device,
     VkImage                                     image,
     VkDeviceMemory                              memory,
@@ -244,9 +259,22 @@ void BestPractices::PostCallRecordvkBindImageMemory(
     }
 }
 
-// Skipping vkQueueBindSparse for autogen as it has a manually created custom function or ignored.
+void BestPractices::PostCallRecordQueueBindSparse(
+    VkQueue                                     queue,
+    uint32_t                                    bindInfoCount,
+    const VkBindSparseInfo*                     pBindInfo,
+    VkFence                                     fence,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordQueueBindSparse(queue, bindInfoCount, pBindInfo, fence, result);
+    ManualPostCallRecordQueueBindSparse(queue, bindInfoCount, pBindInfo, fence, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_DEVICE_LOST};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkQueueBindSparse", result, error_codes, success_codes);
+    }
+}
 
-void BestPractices::PostCallRecordvkCreateFence(
+void BestPractices::PostCallRecordCreateFence(
     VkDevice                                    device,
     const VkFenceCreateInfo*                    pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -260,20 +288,20 @@ void BestPractices::PostCallRecordvkCreateFence(
     }
 }
 
-void BestPractices::PostCallRecordvkResetFences(
+void BestPractices::PostCallRecordResetFences(
     VkDevice                                    device,
     uint32_t                                    fenceCount,
     const VkFence*                              pFences,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordResetFences(device, fenceCount, pFences, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkResetFences", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkGetFenceStatus(
+void BestPractices::PostCallRecordGetFenceStatus(
     VkDevice                                    device,
     VkFence                                     fence,
     VkResult                                    result) {
@@ -285,7 +313,7 @@ void BestPractices::PostCallRecordvkGetFenceStatus(
     }
 }
 
-void BestPractices::PostCallRecordvkWaitForFences(
+void BestPractices::PostCallRecordWaitForFences(
     VkDevice                                    device,
     uint32_t                                    fenceCount,
     const VkFence*                              pFences,
@@ -300,7 +328,7 @@ void BestPractices::PostCallRecordvkWaitForFences(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateSemaphore(
+void BestPractices::PostCallRecordCreateSemaphore(
     VkDevice                                    device,
     const VkSemaphoreCreateInfo*                pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -314,7 +342,7 @@ void BestPractices::PostCallRecordvkCreateSemaphore(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateEvent(
+void BestPractices::PostCallRecordCreateEvent(
     VkDevice                                    device,
     const VkEventCreateInfo*                    pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -328,7 +356,7 @@ void BestPractices::PostCallRecordvkCreateEvent(
     }
 }
 
-void BestPractices::PostCallRecordvkGetEventStatus(
+void BestPractices::PostCallRecordGetEventStatus(
     VkDevice                                    device,
     VkEvent                                     event,
     VkResult                                    result) {
@@ -340,7 +368,7 @@ void BestPractices::PostCallRecordvkGetEventStatus(
     }
 }
 
-void BestPractices::PostCallRecordvkSetEvent(
+void BestPractices::PostCallRecordSetEvent(
     VkDevice                                    device,
     VkEvent                                     event,
     VkResult                                    result) {
@@ -352,19 +380,19 @@ void BestPractices::PostCallRecordvkSetEvent(
     }
 }
 
-void BestPractices::PostCallRecordvkResetEvent(
+void BestPractices::PostCallRecordResetEvent(
     VkDevice                                    device,
     VkEvent                                     event,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordResetEvent(device, event, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkResetEvent", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkCreateQueryPool(
+void BestPractices::PostCallRecordCreateQueryPool(
     VkDevice                                    device,
     const VkQueryPoolCreateInfo*                pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -378,7 +406,7 @@ void BestPractices::PostCallRecordvkCreateQueryPool(
     }
 }
 
-void BestPractices::PostCallRecordvkGetQueryPoolResults(
+void BestPractices::PostCallRecordGetQueryPoolResults(
     VkDevice                                    device,
     VkQueryPool                                 queryPool,
     uint32_t                                    firstQuery,
@@ -396,7 +424,7 @@ void BestPractices::PostCallRecordvkGetQueryPoolResults(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateBuffer(
+void BestPractices::PostCallRecordCreateBuffer(
     VkDevice                                    device,
     const VkBufferCreateInfo*                   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -410,7 +438,7 @@ void BestPractices::PostCallRecordvkCreateBuffer(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateBufferView(
+void BestPractices::PostCallRecordCreateBufferView(
     VkDevice                                    device,
     const VkBufferViewCreateInfo*               pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -424,7 +452,7 @@ void BestPractices::PostCallRecordvkCreateBufferView(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateImage(
+void BestPractices::PostCallRecordCreateImage(
     VkDevice                                    device,
     const VkImageCreateInfo*                    pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -438,7 +466,7 @@ void BestPractices::PostCallRecordvkCreateImage(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateImageView(
+void BestPractices::PostCallRecordCreateImageView(
     VkDevice                                    device,
     const VkImageViewCreateInfo*                pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -452,7 +480,7 @@ void BestPractices::PostCallRecordvkCreateImageView(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateShaderModule(
+void BestPractices::PostCallRecordCreateShaderModule(
     VkDevice                                    device,
     const VkShaderModuleCreateInfo*             pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -467,7 +495,7 @@ void BestPractices::PostCallRecordvkCreateShaderModule(
     }
 }
 
-void BestPractices::PostCallRecordvkCreatePipelineCache(
+void BestPractices::PostCallRecordCreatePipelineCache(
     VkDevice                                    device,
     const VkPipelineCacheCreateInfo*            pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -481,7 +509,7 @@ void BestPractices::PostCallRecordvkCreatePipelineCache(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPipelineCacheData(
+void BestPractices::PostCallRecordGetPipelineCacheData(
     VkDevice                                    device,
     VkPipelineCache                             pipelineCache,
     size_t*                                     pDataSize,
@@ -495,7 +523,7 @@ void BestPractices::PostCallRecordvkGetPipelineCacheData(
     }
 }
 
-void BestPractices::PostCallRecordvkMergePipelineCaches(
+void BestPractices::PostCallRecordMergePipelineCaches(
     VkDevice                                    device,
     VkPipelineCache                             dstCache,
     uint32_t                                    srcCacheCount,
@@ -509,7 +537,7 @@ void BestPractices::PostCallRecordvkMergePipelineCaches(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateGraphicsPipelines(
+void BestPractices::PostCallRecordCreateGraphicsPipelines(
     VkDevice                                    device,
     VkPipelineCache                             pipelineCache,
     uint32_t                                    createInfoCount,
@@ -519,6 +547,7 @@ void BestPractices::PostCallRecordvkCreateGraphicsPipelines(
     VkResult                                    result,
     void*                                       state_data) {
     ValidationStateTracker::PostCallRecordCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, result, state_data);
+    ManualPostCallRecordCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, result, state_data);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_INVALID_SHADER_NV};
         static const std::vector<VkResult> success_codes = {VK_PIPELINE_COMPILE_REQUIRED_EXT};
@@ -526,7 +555,7 @@ void BestPractices::PostCallRecordvkCreateGraphicsPipelines(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateComputePipelines(
+void BestPractices::PostCallRecordCreateComputePipelines(
     VkDevice                                    device,
     VkPipelineCache                             pipelineCache,
     uint32_t                                    createInfoCount,
@@ -543,7 +572,7 @@ void BestPractices::PostCallRecordvkCreateComputePipelines(
     }
 }
 
-void BestPractices::PostCallRecordvkCreatePipelineLayout(
+void BestPractices::PostCallRecordCreatePipelineLayout(
     VkDevice                                    device,
     const VkPipelineLayoutCreateInfo*           pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -557,7 +586,7 @@ void BestPractices::PostCallRecordvkCreatePipelineLayout(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateSampler(
+void BestPractices::PostCallRecordCreateSampler(
     VkDevice                                    device,
     const VkSamplerCreateInfo*                  pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -565,13 +594,13 @@ void BestPractices::PostCallRecordvkCreateSampler(
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordCreateSampler(device, pCreateInfo, pAllocator, pSampler, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_TOO_MANY_OBJECTS};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkCreateSampler", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDescriptorSetLayout(
+void BestPractices::PostCallRecordCreateDescriptorSetLayout(
     VkDevice                                    device,
     const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -585,7 +614,7 @@ void BestPractices::PostCallRecordvkCreateDescriptorSetLayout(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDescriptorPool(
+void BestPractices::PostCallRecordCreateDescriptorPool(
     VkDevice                                    device,
     const VkDescriptorPoolCreateInfo*           pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -599,13 +628,14 @@ void BestPractices::PostCallRecordvkCreateDescriptorPool(
     }
 }
 
-void BestPractices::PostCallRecordvkAllocateDescriptorSets(
+void BestPractices::PostCallRecordAllocateDescriptorSets(
     VkDevice                                    device,
     const VkDescriptorSetAllocateInfo*          pAllocateInfo,
     VkDescriptorSet*                            pDescriptorSets,
     VkResult                                    result,
     void*                                       state_data) {
     ValidationStateTracker::PostCallRecordAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets, result, state_data);
+    ManualPostCallRecordAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets, result, state_data);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_FRAGMENTED_POOL,VK_ERROR_OUT_OF_POOL_MEMORY};
         static const std::vector<VkResult> success_codes = {};
@@ -613,7 +643,7 @@ void BestPractices::PostCallRecordvkAllocateDescriptorSets(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateFramebuffer(
+void BestPractices::PostCallRecordCreateFramebuffer(
     VkDevice                                    device,
     const VkFramebufferCreateInfo*              pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -627,7 +657,7 @@ void BestPractices::PostCallRecordvkCreateFramebuffer(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateRenderPass(
+void BestPractices::PostCallRecordCreateRenderPass(
     VkDevice                                    device,
     const VkRenderPassCreateInfo*               pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -641,7 +671,7 @@ void BestPractices::PostCallRecordvkCreateRenderPass(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateCommandPool(
+void BestPractices::PostCallRecordCreateCommandPool(
     VkDevice                                    device,
     const VkCommandPoolCreateInfo*              pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -655,20 +685,20 @@ void BestPractices::PostCallRecordvkCreateCommandPool(
     }
 }
 
-void BestPractices::PostCallRecordvkResetCommandPool(
+void BestPractices::PostCallRecordResetCommandPool(
     VkDevice                                    device,
     VkCommandPool                               commandPool,
     VkCommandPoolResetFlags                     flags,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordResetCommandPool(device, commandPool, flags, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkResetCommandPool", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkAllocateCommandBuffers(
+void BestPractices::PostCallRecordAllocateCommandBuffers(
     VkDevice                                    device,
     const VkCommandBufferAllocateInfo*          pAllocateInfo,
     VkCommandBuffer*                            pCommandBuffers,
@@ -681,7 +711,7 @@ void BestPractices::PostCallRecordvkAllocateCommandBuffers(
     }
 }
 
-void BestPractices::PostCallRecordvkBeginCommandBuffer(
+void BestPractices::PostCallRecordBeginCommandBuffer(
     VkCommandBuffer                             commandBuffer,
     const VkCommandBufferBeginInfo*             pBeginInfo,
     VkResult                                    result) {
@@ -693,7 +723,7 @@ void BestPractices::PostCallRecordvkBeginCommandBuffer(
     }
 }
 
-void BestPractices::PostCallRecordvkEndCommandBuffer(
+void BestPractices::PostCallRecordEndCommandBuffer(
     VkCommandBuffer                             commandBuffer,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordEndCommandBuffer(commandBuffer, result);
@@ -704,13 +734,13 @@ void BestPractices::PostCallRecordvkEndCommandBuffer(
     }
 }
 
-void BestPractices::PostCallRecordvkResetCommandBuffer(
+void BestPractices::PostCallRecordResetCommandBuffer(
     VkCommandBuffer                             commandBuffer,
     VkCommandBufferResetFlags                   flags,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordResetCommandBuffer(commandBuffer, flags, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkResetCommandBuffer", result, error_codes, success_codes);
     }
@@ -718,7 +748,7 @@ void BestPractices::PostCallRecordvkResetCommandBuffer(
 
 // Skipping vkEnumerateInstanceVersion for autogen as it has a manually created custom function or ignored.
 
-void BestPractices::PostCallRecordvkBindBufferMemory2(
+void BestPractices::PostCallRecordBindBufferMemory2(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
     const VkBindBufferMemoryInfo*               pBindInfos,
@@ -731,7 +761,7 @@ void BestPractices::PostCallRecordvkBindBufferMemory2(
     }
 }
 
-void BestPractices::PostCallRecordvkBindImageMemory2(
+void BestPractices::PostCallRecordBindImageMemory2(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
     const VkBindImageMemoryInfo*                pBindInfos,
@@ -744,7 +774,7 @@ void BestPractices::PostCallRecordvkBindImageMemory2(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumeratePhysicalDeviceGroups(
+void BestPractices::PostCallRecordEnumeratePhysicalDeviceGroups(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties,
@@ -757,7 +787,7 @@ void BestPractices::PostCallRecordvkEnumeratePhysicalDeviceGroups(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceImageFormatProperties2(
+void BestPractices::PostCallRecordGetPhysicalDeviceImageFormatProperties2(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
     VkImageFormatProperties2*                   pImageFormatProperties,
@@ -770,7 +800,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceImageFormatProperties2(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateSamplerYcbcrConversion(
+void BestPractices::PostCallRecordCreateSamplerYcbcrConversion(
     VkDevice                                    device,
     const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -784,7 +814,7 @@ void BestPractices::PostCallRecordvkCreateSamplerYcbcrConversion(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDescriptorUpdateTemplate(
+void BestPractices::PostCallRecordCreateDescriptorUpdateTemplate(
     VkDevice                                    device,
     const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -798,7 +828,7 @@ void BestPractices::PostCallRecordvkCreateDescriptorUpdateTemplate(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateRenderPass2(
+void BestPractices::PostCallRecordCreateRenderPass2(
     VkDevice                                    device,
     const VkRenderPassCreateInfo2*              pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -812,7 +842,7 @@ void BestPractices::PostCallRecordvkCreateRenderPass2(
     }
 }
 
-void BestPractices::PostCallRecordvkGetSemaphoreCounterValue(
+void BestPractices::PostCallRecordGetSemaphoreCounterValue(
     VkDevice                                    device,
     VkSemaphore                                 semaphore,
     uint64_t*                                   pValue,
@@ -825,7 +855,7 @@ void BestPractices::PostCallRecordvkGetSemaphoreCounterValue(
     }
 }
 
-void BestPractices::PostCallRecordvkWaitSemaphores(
+void BestPractices::PostCallRecordWaitSemaphores(
     VkDevice                                    device,
     const VkSemaphoreWaitInfo*                  pWaitInfo,
     uint64_t                                    timeout,
@@ -838,7 +868,7 @@ void BestPractices::PostCallRecordvkWaitSemaphores(
     }
 }
 
-void BestPractices::PostCallRecordvkSignalSemaphore(
+void BestPractices::PostCallRecordSignalSemaphore(
     VkDevice                                    device,
     const VkSemaphoreSignalInfo*                pSignalInfo,
     VkResult                                    result) {
@@ -850,7 +880,7 @@ void BestPractices::PostCallRecordvkSignalSemaphore(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceSupportKHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfaceSupportKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t                                    queueFamilyIndex,
     VkSurfaceKHR                                surface,
@@ -864,12 +894,13 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceSupportKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     VkSurfaceCapabilitiesKHR*                   pSurfaceCapabilities,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, pSurfaceCapabilities, result);
+    ManualPostCallRecordGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, pSurfaceCapabilities, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {};
@@ -877,13 +908,14 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceCapabilitiesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceFormatsKHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfaceFormatsKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     uint32_t*                                   pSurfaceFormatCount,
     VkSurfaceFormatKHR*                         pSurfaceFormats,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats, result);
+    ManualPostCallRecordGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
@@ -891,13 +923,14 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceFormatsKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfacePresentModesKHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfacePresentModesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     uint32_t*                                   pPresentModeCount,
     VkPresentModeKHR*                           pPresentModes,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, pPresentModeCount, pPresentModes, result);
+    ManualPostCallRecordGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, pPresentModeCount, pPresentModes, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
@@ -905,13 +938,14 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfacePresentModesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateSwapchainKHR(
+void BestPractices::PostCallRecordCreateSwapchainKHR(
     VkDevice                                    device,
     const VkSwapchainCreateInfoKHR*             pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkSwapchainKHR*                             pSwapchain,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain, result);
+    ManualPostCallRecordCreateSwapchainKHR(device, pCreateInfo, pAllocator, pSwapchain, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_DEVICE_LOST,VK_ERROR_SURFACE_LOST_KHR,VK_ERROR_NATIVE_WINDOW_IN_USE_KHR,VK_ERROR_INITIALIZATION_FAILED};
         static const std::vector<VkResult> success_codes = {};
@@ -919,13 +953,14 @@ void BestPractices::PostCallRecordvkCreateSwapchainKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetSwapchainImagesKHR(
+void BestPractices::PostCallRecordGetSwapchainImagesKHR(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     uint32_t*                                   pSwapchainImageCount,
     VkImage*                                    pSwapchainImages,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetSwapchainImagesKHR(device, swapchain, pSwapchainImageCount, pSwapchainImages, result);
+    ManualPostCallRecordGetSwapchainImagesKHR(device, swapchain, pSwapchainImageCount, pSwapchainImages, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
@@ -933,7 +968,7 @@ void BestPractices::PostCallRecordvkGetSwapchainImagesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkAcquireNextImageKHR(
+void BestPractices::PostCallRecordAcquireNextImageKHR(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     uint64_t                                    timeout,
@@ -949,11 +984,12 @@ void BestPractices::PostCallRecordvkAcquireNextImageKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkQueuePresentKHR(
+void BestPractices::PostCallRecordQueuePresentKHR(
     VkQueue                                     queue,
     const VkPresentInfoKHR*                     pPresentInfo,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordQueuePresentKHR(queue, pPresentInfo, result);
+    ManualPostCallRecordQueuePresentKHR(queue, pPresentInfo, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_DEVICE_LOST,VK_ERROR_OUT_OF_DATE_KHR,VK_ERROR_SURFACE_LOST_KHR,VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT};
         static const std::vector<VkResult> success_codes = {VK_SUBOPTIMAL_KHR};
@@ -961,7 +997,7 @@ void BestPractices::PostCallRecordvkQueuePresentKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetDeviceGroupPresentCapabilitiesKHR(
+void BestPractices::PostCallRecordGetDeviceGroupPresentCapabilitiesKHR(
     VkDevice                                    device,
     VkDeviceGroupPresentCapabilitiesKHR*        pDeviceGroupPresentCapabilities,
     VkResult                                    result) {
@@ -973,7 +1009,7 @@ void BestPractices::PostCallRecordvkGetDeviceGroupPresentCapabilitiesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetDeviceGroupSurfacePresentModesKHR(
+void BestPractices::PostCallRecordGetDeviceGroupSurfacePresentModesKHR(
     VkDevice                                    device,
     VkSurfaceKHR                                surface,
     VkDeviceGroupPresentModeFlagsKHR*           pModes,
@@ -986,7 +1022,7 @@ void BestPractices::PostCallRecordvkGetDeviceGroupSurfacePresentModesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDevicePresentRectanglesKHR(
+void BestPractices::PostCallRecordGetPhysicalDevicePresentRectanglesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     uint32_t*                                   pRectCount,
@@ -1000,7 +1036,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDevicePresentRectanglesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkAcquireNextImage2KHR(
+void BestPractices::PostCallRecordAcquireNextImage2KHR(
     VkDevice                                    device,
     const VkAcquireNextImageInfoKHR*            pAcquireInfo,
     uint32_t*                                   pImageIndex,
@@ -1013,7 +1049,7 @@ void BestPractices::PostCallRecordvkAcquireNextImage2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayPropertiesKHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceDisplayPropertiesKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkDisplayPropertiesKHR*                     pProperties,
@@ -1026,12 +1062,13 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayPropertiesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayPlanePropertiesKHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkDisplayPlanePropertiesKHR*                pProperties,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice, pPropertyCount, pProperties, result);
+    ManualPostCallRecordGetPhysicalDeviceDisplayPlanePropertiesKHR(physicalDevice, pPropertyCount, pProperties, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
@@ -1039,7 +1076,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayPlanePropertiesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetDisplayPlaneSupportedDisplaysKHR(
+void BestPractices::PostCallRecordGetDisplayPlaneSupportedDisplaysKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t                                    planeIndex,
     uint32_t*                                   pDisplayCount,
@@ -1053,7 +1090,7 @@ void BestPractices::PostCallRecordvkGetDisplayPlaneSupportedDisplaysKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetDisplayModePropertiesKHR(
+void BestPractices::PostCallRecordGetDisplayModePropertiesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkDisplayKHR                                display,
     uint32_t*                                   pPropertyCount,
@@ -1067,7 +1104,7 @@ void BestPractices::PostCallRecordvkGetDisplayModePropertiesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDisplayModeKHR(
+void BestPractices::PostCallRecordCreateDisplayModeKHR(
     VkPhysicalDevice                            physicalDevice,
     VkDisplayKHR                                display,
     const VkDisplayModeCreateInfoKHR*           pCreateInfo,
@@ -1082,7 +1119,7 @@ void BestPractices::PostCallRecordvkCreateDisplayModeKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetDisplayPlaneCapabilitiesKHR(
+void BestPractices::PostCallRecordGetDisplayPlaneCapabilitiesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkDisplayModeKHR                            mode,
     uint32_t                                    planeIndex,
@@ -1096,7 +1133,7 @@ void BestPractices::PostCallRecordvkGetDisplayPlaneCapabilitiesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDisplayPlaneSurfaceKHR(
+void BestPractices::PostCallRecordCreateDisplayPlaneSurfaceKHR(
     VkInstance                                  instance,
     const VkDisplaySurfaceCreateInfoKHR*        pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1110,7 +1147,7 @@ void BestPractices::PostCallRecordvkCreateDisplayPlaneSurfaceKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateSharedSwapchainsKHR(
+void BestPractices::PostCallRecordCreateSharedSwapchainsKHR(
     VkDevice                                    device,
     uint32_t                                    swapchainCount,
     const VkSwapchainCreateInfoKHR*             pCreateInfos,
@@ -1127,7 +1164,7 @@ void BestPractices::PostCallRecordvkCreateSharedSwapchainsKHR(
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 
-void BestPractices::PostCallRecordvkCreateXlibSurfaceKHR(
+void BestPractices::PostCallRecordCreateXlibSurfaceKHR(
     VkInstance                                  instance,
     const VkXlibSurfaceCreateInfoKHR*           pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1145,7 +1182,7 @@ void BestPractices::PostCallRecordvkCreateXlibSurfaceKHR(
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
 
-void BestPractices::PostCallRecordvkCreateXcbSurfaceKHR(
+void BestPractices::PostCallRecordCreateXcbSurfaceKHR(
     VkInstance                                  instance,
     const VkXcbSurfaceCreateInfoKHR*            pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1163,7 +1200,7 @@ void BestPractices::PostCallRecordvkCreateXcbSurfaceKHR(
 
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 
-void BestPractices::PostCallRecordvkCreateWaylandSurfaceKHR(
+void BestPractices::PostCallRecordCreateWaylandSurfaceKHR(
     VkInstance                                  instance,
     const VkWaylandSurfaceCreateInfoKHR*        pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1181,7 +1218,7 @@ void BestPractices::PostCallRecordvkCreateWaylandSurfaceKHR(
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 
-void BestPractices::PostCallRecordvkCreateAndroidSurfaceKHR(
+void BestPractices::PostCallRecordCreateAndroidSurfaceKHR(
     VkInstance                                  instance,
     const VkAndroidSurfaceCreateInfoKHR*        pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1199,7 +1236,7 @@ void BestPractices::PostCallRecordvkCreateAndroidSurfaceKHR(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkCreateWin32SurfaceKHR(
+void BestPractices::PostCallRecordCreateWin32SurfaceKHR(
     VkInstance                                  instance,
     const VkWin32SurfaceCreateInfoKHR*          pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1215,7 +1252,7 @@ void BestPractices::PostCallRecordvkCreateWin32SurfaceKHR(
 
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceImageFormatProperties2KHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceImageFormatProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
     VkImageFormatProperties2*                   pImageFormatProperties,
@@ -1228,7 +1265,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceImageFormatProperties2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumeratePhysicalDeviceGroupsKHR(
+void BestPractices::PostCallRecordEnumeratePhysicalDeviceGroupsKHR(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties,
@@ -1243,7 +1280,7 @@ void BestPractices::PostCallRecordvkEnumeratePhysicalDeviceGroupsKHR(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetMemoryWin32HandleKHR(
+void BestPractices::PostCallRecordGetMemoryWin32HandleKHR(
     VkDevice                                    device,
     const VkMemoryGetWin32HandleInfoKHR*        pGetWin32HandleInfo,
     HANDLE*                                     pHandle,
@@ -1260,7 +1297,7 @@ void BestPractices::PostCallRecordvkGetMemoryWin32HandleKHR(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetMemoryWin32HandlePropertiesKHR(
+void BestPractices::PostCallRecordGetMemoryWin32HandlePropertiesKHR(
     VkDevice                                    device,
     VkExternalMemoryHandleTypeFlagBits          handleType,
     HANDLE                                      handle,
@@ -1268,7 +1305,7 @@ void BestPractices::PostCallRecordvkGetMemoryWin32HandlePropertiesKHR(
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetMemoryWin32HandlePropertiesKHR(device, handleType, handle, pMemoryWin32HandleProperties, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_INVALID_EXTERNAL_HANDLE};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_INVALID_EXTERNAL_HANDLE};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkGetMemoryWin32HandlePropertiesKHR", result, error_codes, success_codes);
     }
@@ -1276,7 +1313,7 @@ void BestPractices::PostCallRecordvkGetMemoryWin32HandlePropertiesKHR(
 
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetMemoryFdKHR(
+void BestPractices::PostCallRecordGetMemoryFdKHR(
     VkDevice                                    device,
     const VkMemoryGetFdInfoKHR*                 pGetFdInfo,
     int*                                        pFd,
@@ -1289,7 +1326,7 @@ void BestPractices::PostCallRecordvkGetMemoryFdKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetMemoryFdPropertiesKHR(
+void BestPractices::PostCallRecordGetMemoryFdPropertiesKHR(
     VkDevice                                    device,
     VkExternalMemoryHandleTypeFlagBits          handleType,
     int                                         fd,
@@ -1297,7 +1334,7 @@ void BestPractices::PostCallRecordvkGetMemoryFdPropertiesKHR(
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetMemoryFdPropertiesKHR(device, handleType, fd, pMemoryFdProperties, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_INVALID_EXTERNAL_HANDLE};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_INVALID_EXTERNAL_HANDLE};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkGetMemoryFdPropertiesKHR", result, error_codes, success_codes);
     }
@@ -1305,7 +1342,7 @@ void BestPractices::PostCallRecordvkGetMemoryFdPropertiesKHR(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkImportSemaphoreWin32HandleKHR(
+void BestPractices::PostCallRecordImportSemaphoreWin32HandleKHR(
     VkDevice                                    device,
     const VkImportSemaphoreWin32HandleInfoKHR*  pImportSemaphoreWin32HandleInfo,
     VkResult                                    result) {
@@ -1321,7 +1358,7 @@ void BestPractices::PostCallRecordvkImportSemaphoreWin32HandleKHR(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetSemaphoreWin32HandleKHR(
+void BestPractices::PostCallRecordGetSemaphoreWin32HandleKHR(
     VkDevice                                    device,
     const VkSemaphoreGetWin32HandleInfoKHR*     pGetWin32HandleInfo,
     HANDLE*                                     pHandle,
@@ -1336,7 +1373,7 @@ void BestPractices::PostCallRecordvkGetSemaphoreWin32HandleKHR(
 
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkImportSemaphoreFdKHR(
+void BestPractices::PostCallRecordImportSemaphoreFdKHR(
     VkDevice                                    device,
     const VkImportSemaphoreFdInfoKHR*           pImportSemaphoreFdInfo,
     VkResult                                    result) {
@@ -1348,7 +1385,7 @@ void BestPractices::PostCallRecordvkImportSemaphoreFdKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetSemaphoreFdKHR(
+void BestPractices::PostCallRecordGetSemaphoreFdKHR(
     VkDevice                                    device,
     const VkSemaphoreGetFdInfoKHR*              pGetFdInfo,
     int*                                        pFd,
@@ -1361,7 +1398,7 @@ void BestPractices::PostCallRecordvkGetSemaphoreFdKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDescriptorUpdateTemplateKHR(
+void BestPractices::PostCallRecordCreateDescriptorUpdateTemplateKHR(
     VkDevice                                    device,
     const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1375,7 +1412,7 @@ void BestPractices::PostCallRecordvkCreateDescriptorUpdateTemplateKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateRenderPass2KHR(
+void BestPractices::PostCallRecordCreateRenderPass2KHR(
     VkDevice                                    device,
     const VkRenderPassCreateInfo2*              pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1389,7 +1426,7 @@ void BestPractices::PostCallRecordvkCreateRenderPass2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetSwapchainStatusKHR(
+void BestPractices::PostCallRecordGetSwapchainStatusKHR(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     VkResult                                    result) {
@@ -1403,7 +1440,7 @@ void BestPractices::PostCallRecordvkGetSwapchainStatusKHR(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkImportFenceWin32HandleKHR(
+void BestPractices::PostCallRecordImportFenceWin32HandleKHR(
     VkDevice                                    device,
     const VkImportFenceWin32HandleInfoKHR*      pImportFenceWin32HandleInfo,
     VkResult                                    result) {
@@ -1419,7 +1456,7 @@ void BestPractices::PostCallRecordvkImportFenceWin32HandleKHR(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetFenceWin32HandleKHR(
+void BestPractices::PostCallRecordGetFenceWin32HandleKHR(
     VkDevice                                    device,
     const VkFenceGetWin32HandleInfoKHR*         pGetWin32HandleInfo,
     HANDLE*                                     pHandle,
@@ -1434,7 +1471,7 @@ void BestPractices::PostCallRecordvkGetFenceWin32HandleKHR(
 
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkImportFenceFdKHR(
+void BestPractices::PostCallRecordImportFenceFdKHR(
     VkDevice                                    device,
     const VkImportFenceFdInfoKHR*               pImportFenceFdInfo,
     VkResult                                    result) {
@@ -1446,7 +1483,7 @@ void BestPractices::PostCallRecordvkImportFenceFdKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetFenceFdKHR(
+void BestPractices::PostCallRecordGetFenceFdKHR(
     VkDevice                                    device,
     const VkFenceGetFdInfoKHR*                  pGetFdInfo,
     int*                                        pFd,
@@ -1459,7 +1496,7 @@ void BestPractices::PostCallRecordvkGetFenceFdKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
+void BestPractices::PostCallRecordEnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t                                    queueFamilyIndex,
     uint32_t*                                   pCounterCount,
@@ -1474,24 +1511,25 @@ void BestPractices::PostCallRecordvkEnumeratePhysicalDeviceQueueFamilyPerformanc
     }
 }
 
-void BestPractices::PostCallRecordvkAcquireProfilingLockKHR(
+void BestPractices::PostCallRecordAcquireProfilingLockKHR(
     VkDevice                                    device,
     const VkAcquireProfilingLockInfoKHR*        pInfo,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordAcquireProfilingLockKHR(device, pInfo, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_TIMEOUT};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_TIMEOUT};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkAcquireProfilingLockKHR", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceCapabilities2KHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfaceCapabilities2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceSurfaceInfo2KHR*      pSurfaceInfo,
     VkSurfaceCapabilities2KHR*                  pSurfaceCapabilities,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice, pSurfaceInfo, pSurfaceCapabilities, result);
+    ManualPostCallRecordGetPhysicalDeviceSurfaceCapabilities2KHR(physicalDevice, pSurfaceInfo, pSurfaceCapabilities, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {};
@@ -1499,13 +1537,14 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceCapabilities2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceFormats2KHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfaceFormats2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceSurfaceInfo2KHR*      pSurfaceInfo,
     uint32_t*                                   pSurfaceFormatCount,
     VkSurfaceFormat2KHR*                        pSurfaceFormats,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceSurfaceFormats2KHR(physicalDevice, pSurfaceInfo, pSurfaceFormatCount, pSurfaceFormats, result);
+    ManualPostCallRecordGetPhysicalDeviceSurfaceFormats2KHR(physicalDevice, pSurfaceInfo, pSurfaceFormatCount, pSurfaceFormats, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
@@ -1513,7 +1552,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceFormats2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayProperties2KHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceDisplayProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkDisplayProperties2KHR*                    pProperties,
@@ -1526,7 +1565,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayProperties2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayPlaneProperties2KHR(
+void BestPractices::PostCallRecordGetPhysicalDeviceDisplayPlaneProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkDisplayPlaneProperties2KHR*               pProperties,
@@ -1539,7 +1578,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceDisplayPlaneProperties2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetDisplayModeProperties2KHR(
+void BestPractices::PostCallRecordGetDisplayModeProperties2KHR(
     VkPhysicalDevice                            physicalDevice,
     VkDisplayKHR                                display,
     uint32_t*                                   pPropertyCount,
@@ -1553,7 +1592,7 @@ void BestPractices::PostCallRecordvkGetDisplayModeProperties2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetDisplayPlaneCapabilities2KHR(
+void BestPractices::PostCallRecordGetDisplayPlaneCapabilities2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkDisplayPlaneInfo2KHR*               pDisplayPlaneInfo,
     VkDisplayPlaneCapabilities2KHR*             pCapabilities,
@@ -1566,7 +1605,7 @@ void BestPractices::PostCallRecordvkGetDisplayPlaneCapabilities2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateSamplerYcbcrConversionKHR(
+void BestPractices::PostCallRecordCreateSamplerYcbcrConversionKHR(
     VkDevice                                    device,
     const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1580,7 +1619,7 @@ void BestPractices::PostCallRecordvkCreateSamplerYcbcrConversionKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkBindBufferMemory2KHR(
+void BestPractices::PostCallRecordBindBufferMemory2KHR(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
     const VkBindBufferMemoryInfo*               pBindInfos,
@@ -1593,7 +1632,7 @@ void BestPractices::PostCallRecordvkBindBufferMemory2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkBindImageMemory2KHR(
+void BestPractices::PostCallRecordBindImageMemory2KHR(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
     const VkBindImageMemoryInfo*                pBindInfos,
@@ -1606,7 +1645,7 @@ void BestPractices::PostCallRecordvkBindImageMemory2KHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetSemaphoreCounterValueKHR(
+void BestPractices::PostCallRecordGetSemaphoreCounterValueKHR(
     VkDevice                                    device,
     VkSemaphore                                 semaphore,
     uint64_t*                                   pValue,
@@ -1619,7 +1658,7 @@ void BestPractices::PostCallRecordvkGetSemaphoreCounterValueKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkWaitSemaphoresKHR(
+void BestPractices::PostCallRecordWaitSemaphoresKHR(
     VkDevice                                    device,
     const VkSemaphoreWaitInfo*                  pWaitInfo,
     uint64_t                                    timeout,
@@ -1632,7 +1671,7 @@ void BestPractices::PostCallRecordvkWaitSemaphoresKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkSignalSemaphoreKHR(
+void BestPractices::PostCallRecordSignalSemaphoreKHR(
     VkDevice                                    device,
     const VkSemaphoreSignalInfo*                pSignalInfo,
     VkResult                                    result) {
@@ -1644,9 +1683,20 @@ void BestPractices::PostCallRecordvkSignalSemaphoreKHR(
     }
 }
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
+void BestPractices::PostCallRecordGetPhysicalDeviceFragmentShadingRatesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pFragmentShadingRateCount,
+    VkPhysicalDeviceFragmentShadingRateKHR*     pFragmentShadingRates,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordGetPhysicalDeviceFragmentShadingRatesKHR(physicalDevice, pFragmentShadingRateCount, pFragmentShadingRates, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
+        ValidateReturnCodes("vkGetPhysicalDeviceFragmentShadingRatesKHR", result, error_codes, success_codes);
+    }
+}
 
-void BestPractices::PostCallRecordvkCreateDeferredOperationKHR(
+void BestPractices::PostCallRecordCreateDeferredOperationKHR(
     VkDevice                                    device,
     const VkAllocationCallbacks*                pAllocator,
     VkDeferredOperationKHR*                     pDeferredOperation,
@@ -1659,11 +1709,7 @@ void BestPractices::PostCallRecordvkCreateDeferredOperationKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkGetDeferredOperationResultKHR(
+void BestPractices::PostCallRecordGetDeferredOperationResultKHR(
     VkDevice                                    device,
     VkDeferredOperationKHR                      operation,
     VkResult                                    result) {
@@ -1675,11 +1721,7 @@ void BestPractices::PostCallRecordvkGetDeferredOperationResultKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkDeferredOperationJoinKHR(
+void BestPractices::PostCallRecordDeferredOperationJoinKHR(
     VkDevice                                    device,
     VkDeferredOperationKHR                      operation,
     VkResult                                    result) {
@@ -1691,9 +1733,7 @@ void BestPractices::PostCallRecordvkDeferredOperationJoinKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkGetPipelineExecutablePropertiesKHR(
+void BestPractices::PostCallRecordGetPipelineExecutablePropertiesKHR(
     VkDevice                                    device,
     const VkPipelineInfoKHR*                    pPipelineInfo,
     uint32_t*                                   pExecutableCount,
@@ -1707,7 +1747,7 @@ void BestPractices::PostCallRecordvkGetPipelineExecutablePropertiesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPipelineExecutableStatisticsKHR(
+void BestPractices::PostCallRecordGetPipelineExecutableStatisticsKHR(
     VkDevice                                    device,
     const VkPipelineExecutableInfoKHR*          pExecutableInfo,
     uint32_t*                                   pStatisticCount,
@@ -1721,7 +1761,7 @@ void BestPractices::PostCallRecordvkGetPipelineExecutableStatisticsKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPipelineExecutableInternalRepresentationsKHR(
+void BestPractices::PostCallRecordGetPipelineExecutableInternalRepresentationsKHR(
     VkDevice                                    device,
     const VkPipelineExecutableInfoKHR*          pExecutableInfo,
     uint32_t*                                   pInternalRepresentationCount,
@@ -1735,7 +1775,21 @@ void BestPractices::PostCallRecordvkGetPipelineExecutableInternalRepresentations
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDebugReportCallbackEXT(
+void BestPractices::PostCallRecordQueueSubmit2KHR(
+    VkQueue                                     queue,
+    uint32_t                                    submitCount,
+    const VkSubmitInfo2KHR*                     pSubmits,
+    VkFence                                     fence,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordQueueSubmit2KHR(queue, submitCount, pSubmits, fence, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_DEVICE_LOST};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkQueueSubmit2KHR", result, error_codes, success_codes);
+    }
+}
+
+void BestPractices::PostCallRecordCreateDebugReportCallbackEXT(
     VkInstance                                  instance,
     const VkDebugReportCallbackCreateInfoEXT*   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1749,7 +1803,7 @@ void BestPractices::PostCallRecordvkCreateDebugReportCallbackEXT(
     }
 }
 
-void BestPractices::PostCallRecordvkDebugMarkerSetObjectTagEXT(
+void BestPractices::PostCallRecordDebugMarkerSetObjectTagEXT(
     VkDevice                                    device,
     const VkDebugMarkerObjectTagInfoEXT*        pTagInfo,
     VkResult                                    result) {
@@ -1761,7 +1815,7 @@ void BestPractices::PostCallRecordvkDebugMarkerSetObjectTagEXT(
     }
 }
 
-void BestPractices::PostCallRecordvkDebugMarkerSetObjectNameEXT(
+void BestPractices::PostCallRecordDebugMarkerSetObjectNameEXT(
     VkDevice                                    device,
     const VkDebugMarkerObjectNameInfoEXT*       pNameInfo,
     VkResult                                    result) {
@@ -1773,20 +1827,20 @@ void BestPractices::PostCallRecordvkDebugMarkerSetObjectNameEXT(
     }
 }
 
-void BestPractices::PostCallRecordvkGetImageViewAddressNVX(
+void BestPractices::PostCallRecordGetImageViewAddressNVX(
     VkDevice                                    device,
     VkImageView                                 imageView,
     VkImageViewAddressPropertiesNVX*            pProperties,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetImageViewAddressNVX(device, imageView, pProperties, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_UNKNOWN};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_UNKNOWN};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkGetImageViewAddressNVX", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkGetShaderInfoAMD(
+void BestPractices::PostCallRecordGetShaderInfoAMD(
     VkDevice                                    device,
     VkPipeline                                  pipeline,
     VkShaderStageFlagBits                       shaderStage,
@@ -1804,7 +1858,7 @@ void BestPractices::PostCallRecordvkGetShaderInfoAMD(
 
 #ifdef VK_USE_PLATFORM_GGP
 
-void BestPractices::PostCallRecordvkCreateStreamDescriptorSurfaceGGP(
+void BestPractices::PostCallRecordCreateStreamDescriptorSurfaceGGP(
     VkInstance                                  instance,
     const VkStreamDescriptorSurfaceCreateInfoGGP* pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1820,7 +1874,7 @@ void BestPractices::PostCallRecordvkCreateStreamDescriptorSurfaceGGP(
 
 #endif // VK_USE_PLATFORM_GGP
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceExternalImageFormatPropertiesNV(
+void BestPractices::PostCallRecordGetPhysicalDeviceExternalImageFormatPropertiesNV(
     VkPhysicalDevice                            physicalDevice,
     VkFormat                                    format,
     VkImageType                                 type,
@@ -1840,7 +1894,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceExternalImageFormatProperti
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetMemoryWin32HandleNV(
+void BestPractices::PostCallRecordGetMemoryWin32HandleNV(
     VkDevice                                    device,
     VkDeviceMemory                              memory,
     VkExternalMemoryHandleTypeFlagsNV           handleType,
@@ -1858,7 +1912,7 @@ void BestPractices::PostCallRecordvkGetMemoryWin32HandleNV(
 
 #ifdef VK_USE_PLATFORM_VI_NN
 
-void BestPractices::PostCallRecordvkCreateViSurfaceNN(
+void BestPractices::PostCallRecordCreateViSurfaceNN(
     VkInstance                                  instance,
     const VkViSurfaceCreateInfoNN*              pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1876,14 +1930,14 @@ void BestPractices::PostCallRecordvkCreateViSurfaceNN(
 
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
 
-void BestPractices::PostCallRecordvkAcquireXlibDisplayEXT(
+void BestPractices::PostCallRecordAcquireXlibDisplayEXT(
     VkPhysicalDevice                            physicalDevice,
     Display*                                    dpy,
     VkDisplayKHR                                display,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordAcquireXlibDisplayEXT(physicalDevice, dpy, display, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_INITIALIZATION_FAILED};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_INITIALIZATION_FAILED};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkAcquireXlibDisplayEXT", result, error_codes, success_codes);
     }
@@ -1891,12 +1945,31 @@ void BestPractices::PostCallRecordvkAcquireXlibDisplayEXT(
 
 #endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceCapabilities2EXT(
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+
+void BestPractices::PostCallRecordGetRandROutputDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    Display*                                    dpy,
+    RROutput                                    rrOutput,
+    VkDisplayKHR*                               pDisplay,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordGetRandROutputDisplayEXT(physicalDevice, dpy, rrOutput, pDisplay, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkGetRandROutputDisplayEXT", result, error_codes, success_codes);
+    }
+}
+
+#endif // VK_USE_PLATFORM_XLIB_XRANDR_EXT
+
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfaceCapabilities2EXT(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     VkSurfaceCapabilities2EXT*                  pSurfaceCapabilities,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceSurfaceCapabilities2EXT(physicalDevice, surface, pSurfaceCapabilities, result);
+    ManualPostCallRecordGetPhysicalDeviceSurfaceCapabilities2EXT(physicalDevice, surface, pSurfaceCapabilities, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {};
@@ -1904,7 +1977,49 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfaceCapabilities2EXT(
     }
 }
 
-void BestPractices::PostCallRecordvkGetSwapchainCounterEXT(
+void BestPractices::PostCallRecordDisplayPowerControlEXT(
+    VkDevice                                    device,
+    VkDisplayKHR                                display,
+    const VkDisplayPowerInfoEXT*                pDisplayPowerInfo,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordDisplayPowerControlEXT(device, display, pDisplayPowerInfo, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkDisplayPowerControlEXT", result, error_codes, success_codes);
+    }
+}
+
+void BestPractices::PostCallRecordRegisterDeviceEventEXT(
+    VkDevice                                    device,
+    const VkDeviceEventInfoEXT*                 pDeviceEventInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkFence*                                    pFence,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordRegisterDeviceEventEXT(device, pDeviceEventInfo, pAllocator, pFence, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkRegisterDeviceEventEXT", result, error_codes, success_codes);
+    }
+}
+
+void BestPractices::PostCallRecordRegisterDisplayEventEXT(
+    VkDevice                                    device,
+    VkDisplayKHR                                display,
+    const VkDisplayEventInfoEXT*                pDisplayEventInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkFence*                                    pFence,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordRegisterDisplayEventEXT(device, display, pDisplayEventInfo, pAllocator, pFence, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkRegisterDisplayEventEXT", result, error_codes, success_codes);
+    }
+}
+
+void BestPractices::PostCallRecordGetSwapchainCounterEXT(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     VkSurfaceCounterFlagBitsEXT                 counter,
@@ -1912,26 +2027,26 @@ void BestPractices::PostCallRecordvkGetSwapchainCounterEXT(
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetSwapchainCounterEXT(device, swapchain, counter, pCounterValue, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_DEVICE_LOST,VK_ERROR_OUT_OF_DATE_KHR};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_DEVICE_LOST,VK_ERROR_OUT_OF_DATE_KHR};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkGetSwapchainCounterEXT", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkGetRefreshCycleDurationGOOGLE(
+void BestPractices::PostCallRecordGetRefreshCycleDurationGOOGLE(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     VkRefreshCycleDurationGOOGLE*               pDisplayTimingProperties,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetRefreshCycleDurationGOOGLE(device, swapchain, pDisplayTimingProperties, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_DEVICE_LOST,VK_ERROR_SURFACE_LOST_KHR};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_DEVICE_LOST,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkGetRefreshCycleDurationGOOGLE", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkGetPastPresentationTimingGOOGLE(
+void BestPractices::PostCallRecordGetPastPresentationTimingGOOGLE(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     uint32_t*                                   pPresentationTimingCount,
@@ -1939,7 +2054,7 @@ void BestPractices::PostCallRecordvkGetPastPresentationTimingGOOGLE(
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPastPresentationTimingGOOGLE(device, swapchain, pPresentationTimingCount, pPresentationTimings, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_DEVICE_LOST,VK_ERROR_OUT_OF_DATE_KHR,VK_ERROR_SURFACE_LOST_KHR};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_DEVICE_LOST,VK_ERROR_OUT_OF_DATE_KHR,VK_ERROR_SURFACE_LOST_KHR};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
         ValidateReturnCodes("vkGetPastPresentationTimingGOOGLE", result, error_codes, success_codes);
     }
@@ -1947,7 +2062,7 @@ void BestPractices::PostCallRecordvkGetPastPresentationTimingGOOGLE(
 
 #ifdef VK_USE_PLATFORM_IOS_MVK
 
-void BestPractices::PostCallRecordvkCreateIOSSurfaceMVK(
+void BestPractices::PostCallRecordCreateIOSSurfaceMVK(
     VkInstance                                  instance,
     const VkIOSSurfaceCreateInfoMVK*            pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1965,7 +2080,7 @@ void BestPractices::PostCallRecordvkCreateIOSSurfaceMVK(
 
 #ifdef VK_USE_PLATFORM_MACOS_MVK
 
-void BestPractices::PostCallRecordvkCreateMacOSSurfaceMVK(
+void BestPractices::PostCallRecordCreateMacOSSurfaceMVK(
     VkInstance                                  instance,
     const VkMacOSSurfaceCreateInfoMVK*          pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1981,7 +2096,7 @@ void BestPractices::PostCallRecordvkCreateMacOSSurfaceMVK(
 
 #endif // VK_USE_PLATFORM_MACOS_MVK
 
-void BestPractices::PostCallRecordvkSetDebugUtilsObjectNameEXT(
+void BestPractices::PostCallRecordSetDebugUtilsObjectNameEXT(
     VkDevice                                    device,
     const VkDebugUtilsObjectNameInfoEXT*        pNameInfo,
     VkResult                                    result) {
@@ -1993,7 +2108,7 @@ void BestPractices::PostCallRecordvkSetDebugUtilsObjectNameEXT(
     }
 }
 
-void BestPractices::PostCallRecordvkSetDebugUtilsObjectTagEXT(
+void BestPractices::PostCallRecordSetDebugUtilsObjectTagEXT(
     VkDevice                                    device,
     const VkDebugUtilsObjectTagInfoEXT*         pTagInfo,
     VkResult                                    result) {
@@ -2005,7 +2120,7 @@ void BestPractices::PostCallRecordvkSetDebugUtilsObjectTagEXT(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateDebugUtilsMessengerEXT(
+void BestPractices::PostCallRecordCreateDebugUtilsMessengerEXT(
     VkInstance                                  instance,
     const VkDebugUtilsMessengerCreateInfoEXT*   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -2021,14 +2136,14 @@ void BestPractices::PostCallRecordvkCreateDebugUtilsMessengerEXT(
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 
-void BestPractices::PostCallRecordvkGetAndroidHardwareBufferPropertiesANDROID(
+void BestPractices::PostCallRecordGetAndroidHardwareBufferPropertiesANDROID(
     VkDevice                                    device,
     const struct AHardwareBuffer*               buffer,
     VkAndroidHardwareBufferPropertiesANDROID*   pProperties,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetAndroidHardwareBufferPropertiesANDROID(device, buffer, pProperties, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkGetAndroidHardwareBufferPropertiesANDROID", result, error_codes, success_codes);
     }
@@ -2038,7 +2153,7 @@ void BestPractices::PostCallRecordvkGetAndroidHardwareBufferPropertiesANDROID(
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 
-void BestPractices::PostCallRecordvkGetMemoryAndroidHardwareBufferANDROID(
+void BestPractices::PostCallRecordGetMemoryAndroidHardwareBufferANDROID(
     VkDevice                                    device,
     const VkMemoryGetAndroidHardwareBufferInfoANDROID* pInfo,
     struct AHardwareBuffer**                    pBuffer,
@@ -2053,6 +2168,19 @@ void BestPractices::PostCallRecordvkGetMemoryAndroidHardwareBufferANDROID(
 
 #endif // VK_USE_PLATFORM_ANDROID_KHR
 
+void BestPractices::PostCallRecordGetImageDrmFormatModifierPropertiesEXT(
+    VkDevice                                    device,
+    VkImage                                     image,
+    VkImageDrmFormatModifierPropertiesEXT*      pProperties,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordGetImageDrmFormatModifierPropertiesEXT(device, image, pProperties, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkGetImageDrmFormatModifierPropertiesEXT", result, error_codes, success_codes);
+    }
+}
+
 // Skipping vkCreateValidationCacheEXT for autogen as it has a manually created custom function or ignored.
 
 // Skipping vkDestroyValidationCacheEXT for autogen as it has a manually created custom function or ignored.
@@ -2061,7 +2189,7 @@ void BestPractices::PostCallRecordvkGetMemoryAndroidHardwareBufferANDROID(
 
 // Skipping vkGetValidationCacheDataEXT for autogen as it has a manually created custom function or ignored.
 
-void BestPractices::PostCallRecordvkCreateAccelerationStructureNV(
+void BestPractices::PostCallRecordCreateAccelerationStructureNV(
     VkDevice                                    device,
     const VkAccelerationStructureCreateInfoNV*  pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -2075,23 +2203,10 @@ void BestPractices::PostCallRecordvkCreateAccelerationStructureNV(
     }
 }
 
-void BestPractices::PostCallRecordvkBindAccelerationStructureMemoryKHR(
+void BestPractices::PostCallRecordBindAccelerationStructureMemoryNV(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
-    const VkBindAccelerationStructureMemoryInfoKHR* pBindInfos,
-    VkResult                                    result) {
-    ValidationStateTracker::PostCallRecordBindAccelerationStructureMemoryKHR(device, bindInfoCount, pBindInfos, result);
-    if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
-        static const std::vector<VkResult> success_codes = {};
-        ValidateReturnCodes("vkBindAccelerationStructureMemoryKHR", result, error_codes, success_codes);
-    }
-}
-
-void BestPractices::PostCallRecordvkBindAccelerationStructureMemoryNV(
-    VkDevice                                    device,
-    uint32_t                                    bindInfoCount,
-    const VkBindAccelerationStructureMemoryInfoKHR* pBindInfos,
+    const VkBindAccelerationStructureMemoryInfoNV* pBindInfos,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordBindAccelerationStructureMemoryNV(device, bindInfoCount, pBindInfos, result);
     if (result != VK_SUCCESS) {
@@ -2101,7 +2216,7 @@ void BestPractices::PostCallRecordvkBindAccelerationStructureMemoryNV(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateRayTracingPipelinesNV(
+void BestPractices::PostCallRecordCreateRayTracingPipelinesNV(
     VkDevice                                    device,
     VkPipelineCache                             pipelineCache,
     uint32_t                                    createInfoCount,
@@ -2118,7 +2233,7 @@ void BestPractices::PostCallRecordvkCreateRayTracingPipelinesNV(
     }
 }
 
-void BestPractices::PostCallRecordvkGetRayTracingShaderGroupHandlesKHR(
+void BestPractices::PostCallRecordGetRayTracingShaderGroupHandlesKHR(
     VkDevice                                    device,
     VkPipeline                                  pipeline,
     uint32_t                                    firstGroup,
@@ -2134,7 +2249,7 @@ void BestPractices::PostCallRecordvkGetRayTracingShaderGroupHandlesKHR(
     }
 }
 
-void BestPractices::PostCallRecordvkGetRayTracingShaderGroupHandlesNV(
+void BestPractices::PostCallRecordGetRayTracingShaderGroupHandlesNV(
     VkDevice                                    device,
     VkPipeline                                  pipeline,
     uint32_t                                    firstGroup,
@@ -2150,9 +2265,9 @@ void BestPractices::PostCallRecordvkGetRayTracingShaderGroupHandlesNV(
     }
 }
 
-void BestPractices::PostCallRecordvkGetAccelerationStructureHandleNV(
+void BestPractices::PostCallRecordGetAccelerationStructureHandleNV(
     VkDevice                                    device,
-    VkAccelerationStructureKHR                  accelerationStructure,
+    VkAccelerationStructureNV                   accelerationStructure,
     size_t                                      dataSize,
     void*                                       pData,
     VkResult                                    result) {
@@ -2164,7 +2279,7 @@ void BestPractices::PostCallRecordvkGetAccelerationStructureHandleNV(
     }
 }
 
-void BestPractices::PostCallRecordvkCompileDeferredNV(
+void BestPractices::PostCallRecordCompileDeferredNV(
     VkDevice                                    device,
     VkPipeline                                  pipeline,
     uint32_t                                    shader,
@@ -2177,7 +2292,7 @@ void BestPractices::PostCallRecordvkCompileDeferredNV(
     }
 }
 
-void BestPractices::PostCallRecordvkGetMemoryHostPointerPropertiesEXT(
+void BestPractices::PostCallRecordGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,
     VkExternalMemoryHandleTypeFlagBits          handleType,
     const void*                                 pHostPointer,
@@ -2185,13 +2300,13 @@ void BestPractices::PostCallRecordvkGetMemoryHostPointerPropertiesEXT(
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetMemoryHostPointerPropertiesEXT(device, handleType, pHostPointer, pMemoryHostPointerProperties, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_INVALID_EXTERNAL_HANDLE};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_INVALID_EXTERNAL_HANDLE};
         static const std::vector<VkResult> success_codes = {};
         ValidateReturnCodes("vkGetMemoryHostPointerPropertiesEXT", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
+void BestPractices::PostCallRecordGetPhysicalDeviceCalibrateableTimeDomainsEXT(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pTimeDomainCount,
     VkTimeDomainEXT*                            pTimeDomains,
@@ -2204,7 +2319,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceCalibrateableTimeDomainsEXT
     }
 }
 
-void BestPractices::PostCallRecordvkGetCalibratedTimestampsEXT(
+void BestPractices::PostCallRecordGetCalibratedTimestampsEXT(
     VkDevice                                    device,
     uint32_t                                    timestampCount,
     const VkCalibratedTimestampInfoEXT*         pTimestampInfos,
@@ -2219,7 +2334,7 @@ void BestPractices::PostCallRecordvkGetCalibratedTimestampsEXT(
     }
 }
 
-void BestPractices::PostCallRecordvkInitializePerformanceApiINTEL(
+void BestPractices::PostCallRecordInitializePerformanceApiINTEL(
     VkDevice                                    device,
     const VkInitializePerformanceApiInfoINTEL*  pInitializeInfo,
     VkResult                                    result) {
@@ -2231,7 +2346,7 @@ void BestPractices::PostCallRecordvkInitializePerformanceApiINTEL(
     }
 }
 
-void BestPractices::PostCallRecordvkCmdSetPerformanceMarkerINTEL(
+void BestPractices::PostCallRecordCmdSetPerformanceMarkerINTEL(
     VkCommandBuffer                             commandBuffer,
     const VkPerformanceMarkerInfoINTEL*         pMarkerInfo,
     VkResult                                    result) {
@@ -2243,7 +2358,7 @@ void BestPractices::PostCallRecordvkCmdSetPerformanceMarkerINTEL(
     }
 }
 
-void BestPractices::PostCallRecordvkCmdSetPerformanceStreamMarkerINTEL(
+void BestPractices::PostCallRecordCmdSetPerformanceStreamMarkerINTEL(
     VkCommandBuffer                             commandBuffer,
     const VkPerformanceStreamMarkerInfoINTEL*   pMarkerInfo,
     VkResult                                    result) {
@@ -2255,7 +2370,7 @@ void BestPractices::PostCallRecordvkCmdSetPerformanceStreamMarkerINTEL(
     }
 }
 
-void BestPractices::PostCallRecordvkCmdSetPerformanceOverrideINTEL(
+void BestPractices::PostCallRecordCmdSetPerformanceOverrideINTEL(
     VkCommandBuffer                             commandBuffer,
     const VkPerformanceOverrideInfoINTEL*       pOverrideInfo,
     VkResult                                    result) {
@@ -2267,7 +2382,7 @@ void BestPractices::PostCallRecordvkCmdSetPerformanceOverrideINTEL(
     }
 }
 
-void BestPractices::PostCallRecordvkAcquirePerformanceConfigurationINTEL(
+void BestPractices::PostCallRecordAcquirePerformanceConfigurationINTEL(
     VkDevice                                    device,
     const VkPerformanceConfigurationAcquireInfoINTEL* pAcquireInfo,
     VkPerformanceConfigurationINTEL*            pConfiguration,
@@ -2280,7 +2395,7 @@ void BestPractices::PostCallRecordvkAcquirePerformanceConfigurationINTEL(
     }
 }
 
-void BestPractices::PostCallRecordvkReleasePerformanceConfigurationINTEL(
+void BestPractices::PostCallRecordReleasePerformanceConfigurationINTEL(
     VkDevice                                    device,
     VkPerformanceConfigurationINTEL             configuration,
     VkResult                                    result) {
@@ -2292,7 +2407,7 @@ void BestPractices::PostCallRecordvkReleasePerformanceConfigurationINTEL(
     }
 }
 
-void BestPractices::PostCallRecordvkQueueSetPerformanceConfigurationINTEL(
+void BestPractices::PostCallRecordQueueSetPerformanceConfigurationINTEL(
     VkQueue                                     queue,
     VkPerformanceConfigurationINTEL             configuration,
     VkResult                                    result) {
@@ -2304,7 +2419,7 @@ void BestPractices::PostCallRecordvkQueueSetPerformanceConfigurationINTEL(
     }
 }
 
-void BestPractices::PostCallRecordvkGetPerformanceParameterINTEL(
+void BestPractices::PostCallRecordGetPerformanceParameterINTEL(
     VkDevice                                    device,
     VkPerformanceParameterTypeINTEL             parameter,
     VkPerformanceValueINTEL*                    pValue,
@@ -2319,7 +2434,7 @@ void BestPractices::PostCallRecordvkGetPerformanceParameterINTEL(
 
 #ifdef VK_USE_PLATFORM_FUCHSIA
 
-void BestPractices::PostCallRecordvkCreateImagePipeSurfaceFUCHSIA(
+void BestPractices::PostCallRecordCreateImagePipeSurfaceFUCHSIA(
     VkInstance                                  instance,
     const VkImagePipeSurfaceCreateInfoFUCHSIA*  pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -2337,7 +2452,7 @@ void BestPractices::PostCallRecordvkCreateImagePipeSurfaceFUCHSIA(
 
 #ifdef VK_USE_PLATFORM_METAL_EXT
 
-void BestPractices::PostCallRecordvkCreateMetalSurfaceEXT(
+void BestPractices::PostCallRecordCreateMetalSurfaceEXT(
     VkInstance                                  instance,
     const VkMetalSurfaceCreateInfoEXT*          pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -2353,20 +2468,20 @@ void BestPractices::PostCallRecordvkCreateMetalSurfaceEXT(
 
 #endif // VK_USE_PLATFORM_METAL_EXT
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceToolPropertiesEXT(
+void BestPractices::PostCallRecordGetPhysicalDeviceToolPropertiesEXT(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pToolCount,
     VkPhysicalDeviceToolPropertiesEXT*          pToolProperties,
     VkResult                                    result) {
     ValidationStateTracker::PostCallRecordGetPhysicalDeviceToolPropertiesEXT(physicalDevice, pToolCount, pToolProperties, result);
     if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {};
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
         static const std::vector<VkResult> success_codes = {VK_INCOMPLETE};
         ValidateReturnCodes("vkGetPhysicalDeviceToolPropertiesEXT", result, error_codes, success_codes);
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceCooperativeMatrixPropertiesNV(
+void BestPractices::PostCallRecordGetPhysicalDeviceCooperativeMatrixPropertiesNV(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pPropertyCount,
     VkCooperativeMatrixPropertiesNV*            pProperties,
@@ -2379,7 +2494,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceCooperativeMatrixProperties
     }
 }
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
+void BestPractices::PostCallRecordGetPhysicalDeviceSupportedFramebufferMixedSamplesCombinationsNV(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pCombinationCount,
     VkFramebufferMixedSamplesCombinationNV*     pCombinations,
@@ -2394,7 +2509,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSupportedFramebufferMixedSa
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfacePresentModes2EXT(
+void BestPractices::PostCallRecordGetPhysicalDeviceSurfacePresentModes2EXT(
     VkPhysicalDevice                            physicalDevice,
     const VkPhysicalDeviceSurfaceInfo2KHR*      pSurfaceInfo,
     uint32_t*                                   pPresentModeCount,
@@ -2412,7 +2527,7 @@ void BestPractices::PostCallRecordvkGetPhysicalDeviceSurfacePresentModes2EXT(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkAcquireFullScreenExclusiveModeEXT(
+void BestPractices::PostCallRecordAcquireFullScreenExclusiveModeEXT(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     VkResult                                    result) {
@@ -2428,7 +2543,7 @@ void BestPractices::PostCallRecordvkAcquireFullScreenExclusiveModeEXT(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkReleaseFullScreenExclusiveModeEXT(
+void BestPractices::PostCallRecordReleaseFullScreenExclusiveModeEXT(
     VkDevice                                    device,
     VkSwapchainKHR                              swapchain,
     VkResult                                    result) {
@@ -2444,7 +2559,7 @@ void BestPractices::PostCallRecordvkReleaseFullScreenExclusiveModeEXT(
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkGetDeviceGroupSurfacePresentModes2EXT(
+void BestPractices::PostCallRecordGetDeviceGroupSurfacePresentModes2EXT(
     VkDevice                                    device,
     const VkPhysicalDeviceSurfaceInfo2KHR*      pSurfaceInfo,
     VkDeviceGroupPresentModeFlagsKHR*           pModes,
@@ -2459,7 +2574,7 @@ void BestPractices::PostCallRecordvkGetDeviceGroupSurfacePresentModes2EXT(
 
 #endif // VK_USE_PLATFORM_WIN32_KHR
 
-void BestPractices::PostCallRecordvkCreateHeadlessSurfaceEXT(
+void BestPractices::PostCallRecordCreateHeadlessSurfaceEXT(
     VkInstance                                  instance,
     const VkHeadlessSurfaceCreateInfoEXT*       pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -2473,7 +2588,7 @@ void BestPractices::PostCallRecordvkCreateHeadlessSurfaceEXT(
     }
 }
 
-void BestPractices::PostCallRecordvkCreateIndirectCommandsLayoutNV(
+void BestPractices::PostCallRecordCreateIndirectCommandsLayoutNV(
     VkDevice                                    device,
     const VkIndirectCommandsLayoutCreateInfoNV* pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -2487,9 +2602,105 @@ void BestPractices::PostCallRecordvkCreateIndirectCommandsLayoutNV(
     }
 }
 
-#ifdef VK_ENABLE_BETA_EXTENSIONS
+void BestPractices::PostCallRecordCreatePrivateDataSlotEXT(
+    VkDevice                                    device,
+    const VkPrivateDataSlotCreateInfoEXT*       pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkPrivateDataSlotEXT*                       pPrivateDataSlot,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordCreatePrivateDataSlotEXT(device, pCreateInfo, pAllocator, pPrivateDataSlot, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkCreatePrivateDataSlotEXT", result, error_codes, success_codes);
+    }
+}
 
-void BestPractices::PostCallRecordvkCreateAccelerationStructureKHR(
+void BestPractices::PostCallRecordSetPrivateDataEXT(
+    VkDevice                                    device,
+    VkObjectType                                objectType,
+    uint64_t                                    objectHandle,
+    VkPrivateDataSlotEXT                        privateDataSlot,
+    uint64_t                                    data,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordSetPrivateDataEXT(device, objectType, objectHandle, privateDataSlot, data, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkSetPrivateDataEXT", result, error_codes, success_codes);
+    }
+}
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+
+void BestPractices::PostCallRecordAcquireWinrtDisplayNV(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordAcquireWinrtDisplayNV(physicalDevice, display, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_DEVICE_LOST,VK_ERROR_INITIALIZATION_FAILED};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkAcquireWinrtDisplayNV", result, error_codes, success_codes);
+    }
+}
+
+#endif // VK_USE_PLATFORM_WIN32_KHR
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+
+void BestPractices::PostCallRecordGetWinrtDisplayNV(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t                                    deviceRelativeId,
+    VkDisplayKHR*                               pDisplay,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordGetWinrtDisplayNV(physicalDevice, deviceRelativeId, pDisplay, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_DEVICE_LOST,VK_ERROR_INITIALIZATION_FAILED};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkGetWinrtDisplayNV", result, error_codes, success_codes);
+    }
+}
+
+#endif // VK_USE_PLATFORM_WIN32_KHR
+
+#ifdef VK_USE_PLATFORM_DIRECTFB_EXT
+
+void BestPractices::PostCallRecordCreateDirectFBSurfaceEXT(
+    VkInstance                                  instance,
+    const VkDirectFBSurfaceCreateInfoEXT*       pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordCreateDirectFBSurfaceEXT(instance, pCreateInfo, pAllocator, pSurface, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkCreateDirectFBSurfaceEXT", result, error_codes, success_codes);
+    }
+}
+
+#endif // VK_USE_PLATFORM_DIRECTFB_EXT
+
+#ifdef VK_USE_PLATFORM_SCREEN_QNX
+
+void BestPractices::PostCallRecordCreateScreenSurfaceQNX(
+    VkInstance                                  instance,
+    const VkScreenSurfaceCreateInfoQNX*         pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface,
+    VkResult                                    result) {
+    ValidationStateTracker::PostCallRecordCreateScreenSurfaceQNX(instance, pCreateInfo, pAllocator, pSurface, result);
+    if (result != VK_SUCCESS) {
+        static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
+        static const std::vector<VkResult> success_codes = {};
+        ValidateReturnCodes("vkCreateScreenSurfaceQNX", result, error_codes, success_codes);
+    }
+}
+
+#endif // VK_USE_PLATFORM_SCREEN_QNX
+
+void BestPractices::PostCallRecordCreateAccelerationStructureKHR(
     VkDevice                                    device,
     const VkAccelerationStructureCreateInfoKHR* pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -2503,33 +2714,27 @@ void BestPractices::PostCallRecordvkCreateAccelerationStructureKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkBuildAccelerationStructureKHR(
+void BestPractices::PostCallRecordBuildAccelerationStructuresKHR(
     VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
     uint32_t                                    infoCount,
     const VkAccelerationStructureBuildGeometryInfoKHR* pInfos,
-    const VkAccelerationStructureBuildOffsetInfoKHR* const* ppOffsetInfos,
+    const VkAccelerationStructureBuildRangeInfoKHR* const* ppBuildRangeInfos,
     VkResult                                    result) {
-    ValidationStateTracker::PostCallRecordBuildAccelerationStructureKHR(device, infoCount, pInfos, ppOffsetInfos, result);
+    ValidationStateTracker::PostCallRecordBuildAccelerationStructuresKHR(device, deferredOperation, infoCount, pInfos, ppBuildRangeInfos, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {VK_OPERATION_DEFERRED_KHR,VK_OPERATION_NOT_DEFERRED_KHR};
-        ValidateReturnCodes("vkBuildAccelerationStructureKHR", result, error_codes, success_codes);
+        ValidateReturnCodes("vkBuildAccelerationStructuresKHR", result, error_codes, success_codes);
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkCopyAccelerationStructureKHR(
+void BestPractices::PostCallRecordCopyAccelerationStructureKHR(
     VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
     const VkCopyAccelerationStructureInfoKHR*   pInfo,
     VkResult                                    result) {
-    ValidationStateTracker::PostCallRecordCopyAccelerationStructureKHR(device, pInfo, result);
+    ValidationStateTracker::PostCallRecordCopyAccelerationStructureKHR(device, deferredOperation, pInfo, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {VK_OPERATION_DEFERRED_KHR,VK_OPERATION_NOT_DEFERRED_KHR};
@@ -2537,15 +2742,12 @@ void BestPractices::PostCallRecordvkCopyAccelerationStructureKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkCopyAccelerationStructureToMemoryKHR(
+void BestPractices::PostCallRecordCopyAccelerationStructureToMemoryKHR(
     VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
     const VkCopyAccelerationStructureToMemoryInfoKHR* pInfo,
     VkResult                                    result) {
-    ValidationStateTracker::PostCallRecordCopyAccelerationStructureToMemoryKHR(device, pInfo, result);
+    ValidationStateTracker::PostCallRecordCopyAccelerationStructureToMemoryKHR(device, deferredOperation, pInfo, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {VK_OPERATION_DEFERRED_KHR,VK_OPERATION_NOT_DEFERRED_KHR};
@@ -2553,15 +2755,12 @@ void BestPractices::PostCallRecordvkCopyAccelerationStructureToMemoryKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkCopyMemoryToAccelerationStructureKHR(
+void BestPractices::PostCallRecordCopyMemoryToAccelerationStructureKHR(
     VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
     const VkCopyMemoryToAccelerationStructureInfoKHR* pInfo,
     VkResult                                    result) {
-    ValidationStateTracker::PostCallRecordCopyMemoryToAccelerationStructureKHR(device, pInfo, result);
+    ValidationStateTracker::PostCallRecordCopyMemoryToAccelerationStructureKHR(device, deferredOperation, pInfo, result);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY};
         static const std::vector<VkResult> success_codes = {VK_OPERATION_DEFERRED_KHR,VK_OPERATION_NOT_DEFERRED_KHR};
@@ -2569,11 +2768,7 @@ void BestPractices::PostCallRecordvkCopyMemoryToAccelerationStructureKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkWriteAccelerationStructuresPropertiesKHR(
+void BestPractices::PostCallRecordWriteAccelerationStructuresPropertiesKHR(
     VkDevice                                    device,
     uint32_t                                    accelerationStructureCount,
     const VkAccelerationStructureKHR*           pAccelerationStructures,
@@ -2590,12 +2785,9 @@ void BestPractices::PostCallRecordvkWriteAccelerationStructuresPropertiesKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkCreateRayTracingPipelinesKHR(
+void BestPractices::PostCallRecordCreateRayTracingPipelinesKHR(
     VkDevice                                    device,
+    VkDeferredOperationKHR                      deferredOperation,
     VkPipelineCache                             pipelineCache,
     uint32_t                                    createInfoCount,
     const VkRayTracingPipelineCreateInfoKHR*    pCreateInfos,
@@ -2603,7 +2795,7 @@ void BestPractices::PostCallRecordvkCreateRayTracingPipelinesKHR(
     VkPipeline*                                 pPipelines,
     VkResult                                    result,
     void*                                       state_data) {
-    ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesKHR(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, result, state_data);
+    ValidationStateTracker::PostCallRecordCreateRayTracingPipelinesKHR(device, deferredOperation, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, result, state_data);
     if (result != VK_SUCCESS) {
         static const std::vector<VkResult> error_codes = {VK_ERROR_OUT_OF_HOST_MEMORY,VK_ERROR_OUT_OF_DEVICE_MEMORY,VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS};
         static const std::vector<VkResult> success_codes = {VK_OPERATION_DEFERRED_KHR,VK_OPERATION_NOT_DEFERRED_KHR,VK_PIPELINE_COMPILE_REQUIRED_EXT};
@@ -2611,11 +2803,7 @@ void BestPractices::PostCallRecordvkCreateRayTracingPipelinesKHR(
     }
 }
 
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkGetRayTracingCaptureReplayShaderGroupHandlesKHR(
+void BestPractices::PostCallRecordGetRayTracingCaptureReplayShaderGroupHandlesKHR(
     VkDevice                                    device,
     VkPipeline                                  pipeline,
     uint32_t                                    firstGroup,
@@ -2630,24 +2818,6 @@ void BestPractices::PostCallRecordvkGetRayTracingCaptureReplayShaderGroupHandles
         ValidateReturnCodes("vkGetRayTracingCaptureReplayShaderGroupHandlesKHR", result, error_codes, success_codes);
     }
 }
-
-#endif // VK_ENABLE_BETA_EXTENSIONS
-
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-
-void BestPractices::PostCallRecordvkGetDeviceAccelerationStructureCompatibilityKHR(
-    VkDevice                                    device,
-    const VkAccelerationStructureVersionKHR*    version,
-    VkResult                                    result) {
-    ValidationStateTracker::PostCallRecordGetDeviceAccelerationStructureCompatibilityKHR(device, version, result);
-    if (result != VK_SUCCESS) {
-        static const std::vector<VkResult> error_codes = {VK_ERROR_INCOMPATIBLE_VERSION_KHR};
-        static const std::vector<VkResult> success_codes = {};
-        ValidateReturnCodes("vkGetDeviceAccelerationStructureCompatibilityKHR", result, error_codes, success_codes);
-    }
-}
-
-#endif // VK_ENABLE_BETA_EXTENSIONS
 
 
 

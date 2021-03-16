@@ -18,12 +18,18 @@
 # Needed to make structure definitions match with glslang libraries
 add_definitions(-DNV_EXTENSIONS -DAMD_EXTENSIONS)
 
+if(ANNOTATED_SPEC_LINK)
+    add_definitions(-DANNOTATED_SPEC_LINK=${ANNOTATED_SPEC_LINK})
+endif()
+
 if(WIN32)
     add_definitions(-DVK_USE_PLATFORM_WIN32_KHR -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
     # Workaround for TR1 deprecation in Visual Studio 15.5 until Google Test is updated
     add_definitions(-D_SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING)
-    # Allow Windows to use multiprocessor compilation
-    add_compile_options(/MP)
+    # If MSVC, allow Windows to use multiprocessor compilation
+    if(MSVC)
+        add_compile_options(/MP)
+    endif()
 elseif(ANDROID)
     add_definitions(-DVK_USE_PLATFORM_ANDROID_KHR)
 elseif(APPLE)
@@ -68,10 +74,14 @@ set(COMMON_CPP
     vklayertests_buffer_image_memory_sampler.cpp
     vklayertests_others.cpp
     vklayertests_best_practices.cpp
+    vklayertests_arm_best_practices.cpp
+    vklayertests_gpu.cpp
     vklayertests_descriptor_renderpass_framebuffer.cpp
     vklayertests_command.cpp
     vklayertests_imageless_framebuffer.cpp
+    vklayertests_portability_subset.cpp
     vkpositivelayertests.cpp
+    vksyncvaltests.cpp
     vkrenderframework.cpp
     vktestbinding.cpp
     vktestframework.cpp
@@ -104,6 +114,7 @@ target_include_directories(vk_layer_validation_tests
                                   ${PROJECT_SOURCE_DIR}/layers/generated
                                   ${GLSLANG_SPIRV_INCLUDE_DIR}
                                   ${SPIRV_TOOLS_INCLUDE_DIR}
+                                  ${SPIRV_HEADERS_INCLUDE_DIR}
                                   ${CMAKE_CURRENT_BINARY_DIR}
                                   ${CMAKE_BINARY_DIR}
                                   ${PROJECT_BINARY_DIR}
@@ -111,6 +122,11 @@ target_include_directories(vk_layer_validation_tests
                                   ${PROJECT_BINARY_DIR}/layers)
 add_dependencies(vk_layer_validation_tests
                  VkLayer_utils)
+
+option(PORTABILITY_TESTS_USE_DEVSIM "Automatically add the devsim layer for portability tests" OFF)
+if (PORTABILITY_TESTS_USE_DEVSIM)
+    target_compile_definitions(vk_layer_validation_tests PRIVATE PORTABILITY_TESTS_USE_DEVSIM=1)
+endif()
 
 # Specify target_link_libraries
 if(WIN32)

@@ -41,13 +41,21 @@ LOCAL_SRC_FILES += $(SRC_DIR)/layers/drawdispatch.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/descriptor_sets.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/buffer_validation.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/shader_validation.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/spirv_validation_helper.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_validation.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/gpu_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/debug_printf.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/best_practices_utils.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/best_practices.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/sync_utils.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/sync_vuid_maps.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/core_error_location.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/synchronization_validation_types.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/synchronization_validation.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/convert_to_renderpass2.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/layer_chassis_dispatch.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/chassis.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/layer_options.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/xxhash.c
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/parameter_validation.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/parameter_validation_utils.cpp
@@ -55,13 +63,16 @@ LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/object_tracker.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/object_tracker_utils.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/thread_safety.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/command_counter_helper.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/vk_safe_struct.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/image_layout_map.cpp
 LOCAL_SRC_FILES += $(SRC_DIR)/layers/subresource_adapter.cpp
+LOCAL_SRC_FILES += $(SRC_DIR)/layers/generated/corechecks_optick_instrumentation.cpp
 LOCAL_C_INCLUDES += $(VULKAN_INCLUDE) \
                     $(LOCAL_PATH)/$(SRC_DIR)/layers \
-                    $(LOCAL_PATH)/$(SRC_DIR)/layers/generated
+                    $(LOCAL_PATH)/$(SRC_DIR)/layers/generated \
+                    $(LOCAL_PATH)/$(THIRD_PARTY)/shaderc/third_party/spirv-tools/external/spirv-headers/include
 LOCAL_STATIC_LIBRARIES += layer_utils glslang SPIRV-Tools SPIRV-Tools-opt
-LOCAL_CPPFLAGS += -std=c++11 -Wall -Werror -Wno-unused-function -Wno-unused-const-variable
+LOCAL_CPPFLAGS += -std=c++11 -Wall -Werror -Wno-unused-function -Wno-unused-const-variable -frtti
 LOCAL_CPPFLAGS += -DVK_ENABLE_BETA_EXTENSIONS -DVK_USE_PLATFORM_ANDROID_KHR -DVK_PROTOTYPES -fvisibility=hidden
 LOCAL_LDLIBS    := -llog -landroid
 LOCAL_LDFLAGS   += -Wl,-Bsymbolic
@@ -77,7 +88,11 @@ LOCAL_SRC_FILES += $(SRC_DIR)/tests/layer_validation_tests.cpp \
                    $(SRC_DIR)/tests/vklayertests_others.cpp \
                    $(SRC_DIR)/tests/vklayertests_descriptor_renderpass_framebuffer.cpp \
                    $(SRC_DIR)/tests/vklayertests_command.cpp \
+                   $(SRC_DIR)/tests/vklayertests_gpu.cpp \
+                   $(SRC_DIR)/tests/vklayertests_best_practices.cpp \
+                   $(SRC_DIR)/tests/vklayertests_arm_best_practices.cpp \
                    $(SRC_DIR)/tests/vkpositivelayertests.cpp \
+                   $(SRC_DIR)/tests/vksyncvaltests.cpp \
                    $(SRC_DIR)/tests/vktestbinding.cpp \
                    $(SRC_DIR)/tests/vktestframeworkandroid.cpp \
                    $(SRC_DIR)/tests/vkrenderframework.cpp \
@@ -108,7 +123,11 @@ LOCAL_SRC_FILES += $(SRC_DIR)/tests/layer_validation_tests.cpp \
                    $(SRC_DIR)/tests/vklayertests_others.cpp \
                    $(SRC_DIR)/tests/vklayertests_descriptor_renderpass_framebuffer.cpp \
                    $(SRC_DIR)/tests/vklayertests_command.cpp \
+                   $(SRC_DIR)/tests/vklayertests_gpu.cpp \
+                   $(SRC_DIR)/tests/vklayertests_best_practices.cpp \
+                   $(SRC_DIR)/tests/vklayertests_arm_best_practices.cpp \
                    $(SRC_DIR)/tests/vkpositivelayertests.cpp \
+                   $(SRC_DIR)/tests/vksyncvaltests.cpp \
                    $(SRC_DIR)/tests/vktestbinding.cpp \
                    $(SRC_DIR)/tests/vktestframeworkandroid.cpp \
                    $(SRC_DIR)/tests/vkrenderframework.cpp \

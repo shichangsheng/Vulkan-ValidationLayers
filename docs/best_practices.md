@@ -1,5 +1,5 @@
 <!-- markdownlint-disable MD041 -->
-<!-- Copyright 2015-2019 LunarG, Inc. -->
+<!-- Copyright 2015-2020 LunarG, Inc. -->
 [![Khronos Vulkan][1]][2]
 
 [1]: https://vulkan.lunarg.com/img/Vulkan_100px_Dec16.png "https://www.khronos.org/vulkan/"
@@ -20,9 +20,11 @@ by the Vulkan specification but that may lead to application problems.
 
 Best Practices will ideally be run periodically along with normal validation checks so that issues may be addressed in early stages of development.
 
-The specific areas covered by this layer are currently tracked in
-[Github Issue #24: Best Practices/Assistant/Performance Layer.](https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/24)
-Requests for additional checks can be posted through the same issue, or by creating a new Github issue.
+Best Practices can easily be enabled and configured using the [Vulkan Configurator](https://vulkan.lunarg.com/doc/sdk/latest/windows/vkconfig.html) included with the Vulkan SDK. Or you can manually enable and configure the Best Practices by following the directions below.
+
+The specific areas covered by this layer are currently tracked in the
+[Best Practices Project](https://github.com/KhronosGroup/Vulkan-ValidationLayers/projects/1).
+Requests for additional checks can be requested by creating a Github issue.
 
 ## Enabling Best Practices Validation
 
@@ -37,6 +39,24 @@ To enable using environment variables, set the following variable:
 
 ```code
 VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+```
+
+To additionally enable the ARM-specific best practices checks, use the following:
+
+```code
+khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM
+```
+
+ - or the environment variables for Windows
+
+```code
+VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT;VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM
+```
+
+ - or for Linux -
+
+```code
+VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT:VALIDATION_CHECK_ENABLE_VENDOR_SPECIFIC_ARM
 ```
 
 Some platforms do not support configuration of the validation layers with this configuration file.

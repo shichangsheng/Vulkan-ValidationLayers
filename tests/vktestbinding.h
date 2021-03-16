@@ -1,7 +1,7 @@
 /*
- * Copyright (c) 2015-2016, 2020 The Khronos Group Inc.
- * Copyright (c) 2015-2016, 2020 Valve Corporation
- * Copyright (c) 2015-2016, 2020 LunarG, Inc.
+ * Copyright (c) 2015-2016, 2020-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2016, 2020-2021 Valve Corporation
+ * Copyright (c) 2015-2016, 2020-2021 LunarG, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -330,7 +330,7 @@ class Fence : public internal::NonDispHandle<VkFence> {
 
     // vkGetFenceStatus()
     VkResult status() const { return vk::GetFenceStatus(device(), handle()); }
-    VkResult wait(VkBool32 wait_all, uint64_t timeout) const;
+    VkResult wait(uint64_t timeout) const;
 
     static VkFenceCreateInfo create_info(VkFenceCreateFlags flags);
     static VkFenceCreateInfo create_info();
@@ -358,6 +358,8 @@ class Event : public internal::NonDispHandle<VkEvent> {
     // vkResetEvent()
     VkResult status() const { return vk::GetEventStatus(device(), handle()); }
     void set();
+    void cmd_set(const CommandBuffer &cmd, VkPipelineStageFlags stage_mask);
+    void cmd_reset(const CommandBuffer &cmd, VkPipelineStageFlags stage_mask);
     void reset();
 
     static VkEventCreateInfo create_info(VkFlags flags);
@@ -408,6 +410,11 @@ class Buffer : public internal::NonDispHandle<VkBuffer> {
             init_no_mem(dev,
                         create_info(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, queue_families));
     }
+    void init_as_storage(const Device &dev, VkDeviceSize size, VkMemoryPropertyFlags &reqs,
+        const std::vector<uint32_t> *queue_families = nullptr) {
+        init(dev, create_info(size, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, queue_families), reqs);
+    }
+
     void init_no_mem(const Device &dev, const VkBufferCreateInfo &info);
 
     // get the internal memory
@@ -430,6 +437,25 @@ class Buffer : public internal::NonDispHandle<VkBuffer> {
         barrier.buffer = handle();
         barrier.srcAccessMask = output_mask;
         barrier.dstAccessMask = input_mask;
+        barrier.offset = offset;
+        barrier.size = size;
+        if (create_info_.sharingMode == VK_SHARING_MODE_CONCURRENT) {
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        }
+        return barrier;
+    }
+
+    VkBufferMemoryBarrier2KHR buffer_memory_barrier(VkPipelineStageFlags2KHR src_stage, VkPipelineStageFlags2KHR dst_stage,
+                                                    VkAccessFlags2KHR src_access, VkAccessFlags2KHR dst_access, VkDeviceSize offset,
+                                                    VkDeviceSize size) const {
+        VkBufferMemoryBarrier2KHR barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2_KHR;
+        barrier.buffer = handle();
+        barrier.srcStageMask = src_stage;
+        barrier.dstStageMask = dst_stage;
+        barrier.srcAccessMask = src_access;
+        barrier.dstAccessMask = dst_access;
         barrier.offset = offset;
         barrier.size = size;
         if (create_info_.sharingMode == VK_SHARING_MODE_CONCURRENT) {
@@ -519,6 +545,27 @@ class Image : public internal::NonDispHandle<VkImage> {
         return barrier;
     }
 
+    VkImageMemoryBarrier2KHR image_memory_barrier(VkPipelineStageFlags2KHR src_stage, VkPipelineStageFlags2KHR dst_stage,
+                                                  VkAccessFlags2KHR src_access, VkAccessFlags2KHR dst_access,
+                                                  VkImageLayout old_layout, VkImageLayout new_layout,
+                                                  const VkImageSubresourceRange &range,
+                                                  uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                                                  uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED) const {
+        VkImageMemoryBarrier2KHR barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
+        barrier.srcStageMask = src_stage;
+        barrier.dstStageMask = dst_stage;
+        barrier.srcAccessMask = src_access;
+        barrier.dstAccessMask = dst_access;
+        barrier.oldLayout = old_layout;
+        barrier.newLayout = new_layout;
+        barrier.image = handle();
+        barrier.subresourceRange = range;
+        barrier.srcQueueFamilyIndex = srcQueueFamilyIndex;
+        barrier.dstQueueFamilyIndex = dstQueueFamilyIndex;
+        return barrier;
+    }
+
     static VkImageCreateInfo create_info();
     static VkImageSubresource subresource(VkImageAspectFlags aspect, uint32_t mip_level, uint32_t array_layer);
     static VkImageSubresource subresource(const VkImageSubresourceRange &range, uint32_t mip_level, uint32_t array_layer);
@@ -564,7 +611,6 @@ class AccelerationStructure : public internal::NonDispHandle<VkAccelerationStruc
 
     // vkCreateAccelerationStructureNV
     void init(const Device &dev, const VkAccelerationStructureCreateInfoNV &info, bool init_memory = true);
-
     // vkGetAccelerationStructureMemoryRequirementsNV()
     VkMemoryRequirements2 memory_requirements() const;
     VkMemoryRequirements2 build_scratch_memory_requirements() const;
@@ -575,10 +621,33 @@ class AccelerationStructure : public internal::NonDispHandle<VkAccelerationStruc
 
     const VkDevice &dev() const { return device(); }
 
-    void create_scratch_buffer(const Device &dev, Buffer *buffer);
+    void create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo = NULL);
 
   private:
     VkAccelerationStructureInfoNV info_;
+    DeviceMemory memory_;
+    uint64_t opaque_handle_;
+};
+
+class AccelerationStructureKHR : public internal::NonDispHandle<VkAccelerationStructureKHR> {
+  public:
+    explicit AccelerationStructureKHR(const Device &dev, const VkAccelerationStructureCreateInfoKHR &info,
+                                      bool init_memory = true) {
+        init(dev, info, init_memory);
+    }
+    ~AccelerationStructureKHR();
+    // vkCreateAccelerationStructureNV
+    void init(const Device &dev, const VkAccelerationStructureCreateInfoKHR &info, bool init_memory = true);
+    uint64_t opaque_handle() const { return opaque_handle_; }
+
+    const VkAccelerationStructureCreateInfoKHR &info() const { return info_; }
+
+    const VkDevice &dev() const { return device(); }
+
+    void create_scratch_buffer(const Device &dev, Buffer *buffer, VkBufferCreateInfo *pCreateInfo = NULL);
+
+  private:
+    VkAccelerationStructureCreateInfoKHR info_;
     DeviceMemory memory_;
     uint64_t opaque_handle_;
 };

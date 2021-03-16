@@ -1,7 +1,8 @@
-/* Copyright (c) 2015-2020 The Khronos Group Inc.
- * Copyright (c) 2015-2020 Valve Corporation
- * Copyright (c) 2015-2020 LunarG, Inc.
- * Copyright (C) 2015-2020 Google Inc.
+/* Copyright (c) 2015-2021 The Khronos Group Inc.
+ * Copyright (c) 2015-2021 Valve Corporation
+ * Copyright (c) 2015-2021 LunarG, Inc.
+ * Copyright (C) 2015-2021 Google Inc.
+ * Modifications Copyright (C) 2020 Advanced Micro Devices, Inc. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +22,7 @@
  * Author: Mark Lobodzinski <mark@lunarg.com>
  * Author: Dave Houlton <daveh@lunarg.com>
  * Author: John Zulauf <jzulauf@lunarg.com>
+ * Author: Tobias Hector <tobias.hector@amd.com>
  */
 #ifndef CORE_VALIDATION_TYPES_H_
 #define CORE_VALIDATION_TYPES_H_
@@ -52,15 +54,15 @@
 #include <memory>
 #include <list>
 
-#ifdef VK_USE_PLATFORM_ANDROID_KHR
 #include "android_ndk_types.h"
-#endif  // VK_USE_PLATFORM_ANDROID_KHR
 
 // Fwd declarations -- including descriptor_set.h creates an ugly include loop
 namespace cvdescriptorset {
 class DescriptorSetLayoutDef;
 class DescriptorSetLayout;
 class DescriptorSet;
+class Descriptor;
+
 }  // namespace cvdescriptorset
 
 // Only CoreChecks uses this, but the state tracker stores it.
@@ -70,12 +72,6 @@ using ImageSubresourceLayoutMap = image_layout_map::ImageSubresourceLayoutMap;
 struct CMD_BUFFER_STATE;
 class CoreChecks;
 class ValidationStateTracker;
-
-enum CALL_STATE {
-    UNCALLED,       // Function has not been called
-    QUERY_COUNT,    // Function called once to query a count
-    QUERY_DETAILS,  // Function called w/ a count to query details
-};
 
 class BASE_NODE {
   public:
@@ -100,30 +96,32 @@ class BASE_NODE {
 
 // Track command pools and their command buffers
 struct COMMAND_POOL_STATE : public BASE_NODE {
+    VkCommandPool commandPool;
     VkCommandPoolCreateFlags createFlags;
     uint32_t queueFamilyIndex;
+    bool unprotected;  // can't be used for protected memory
     // Cmd buffers allocated from this pool
     std::unordered_set<VkCommandBuffer> commandBuffers;
 };
 
 // Utilities for barriers and the commmand pool
 template <typename Barrier>
-static bool IsTransferOp(const Barrier *barrier) {
-    return barrier->srcQueueFamilyIndex != barrier->dstQueueFamilyIndex;
+static bool IsTransferOp(const Barrier &barrier) {
+    return barrier.srcQueueFamilyIndex != barrier.dstQueueFamilyIndex;
 }
 
 template <typename Barrier, bool assume_transfer = false>
-static bool TempIsReleaseOp(const COMMAND_POOL_STATE *pool, const Barrier *barrier) {
-    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier->srcQueueFamilyIndex);
+static bool TempIsReleaseOp(const COMMAND_POOL_STATE *pool, const Barrier &barrier) {
+    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier.srcQueueFamilyIndex);
 }
 
 template <typename Barrier, bool assume_transfer = false>
-static bool IsAcquireOp(const COMMAND_POOL_STATE *pool, const Barrier *barrier) {
-    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier->dstQueueFamilyIndex);
+static bool IsAcquireOp(const COMMAND_POOL_STATE *pool, const Barrier &barrier) {
+    return (assume_transfer || IsTransferOp(barrier)) && (pool->queueFamilyIndex == barrier.dstQueueFamilyIndex);
 }
 
-static inline bool QueueFamilyIsSpecial(const uint32_t queue_family_index) {
-    return (queue_family_index == VK_QUEUE_FAMILY_EXTERNAL_KHR) || (queue_family_index == VK_QUEUE_FAMILY_FOREIGN_EXT);
+static inline bool QueueFamilyIsExternal(const uint32_t queue_family_index) {
+    return (queue_family_index == VK_QUEUE_FAMILY_EXTERNAL) || (queue_family_index == VK_QUEUE_FAMILY_FOREIGN_EXT);
 }
 
 static inline bool QueueFamilyIsIgnored(uint32_t queue_family_index) { return queue_family_index == VK_QUEUE_FAMILY_IGNORED; }
@@ -159,11 +157,45 @@ enum descriptor_req {
     DESCRIPTOR_REQ_COMPONENT_TYPE_FLOAT = DESCRIPTOR_REQ_MULTI_SAMPLE << 1,
     DESCRIPTOR_REQ_COMPONENT_TYPE_SINT = DESCRIPTOR_REQ_COMPONENT_TYPE_FLOAT << 1,
     DESCRIPTOR_REQ_COMPONENT_TYPE_UINT = DESCRIPTOR_REQ_COMPONENT_TYPE_SINT << 1,
+
+    DESCRIPTOR_REQ_VIEW_ATOMIC_OPERATION = DESCRIPTOR_REQ_COMPONENT_TYPE_UINT << 1,
+    DESCRIPTOR_REQ_SAMPLER_IMPLICITLOD_DREF_PROJ = DESCRIPTOR_REQ_VIEW_ATOMIC_OPERATION << 1,
+    DESCRIPTOR_REQ_SAMPLER_BIAS_OFFSET = DESCRIPTOR_REQ_SAMPLER_IMPLICITLOD_DREF_PROJ << 1,
+
 };
 
 extern unsigned DescriptorRequirementsBitsFromFormat(VkFormat fmt);
 
-typedef std::map<uint32_t, descriptor_req> BindingReqMap;
+typedef std::pair<unsigned, unsigned> descriptor_slot_t;
+
+struct SamplerUsedByImage {
+    descriptor_slot_t sampler_slot;
+    uint32_t sampler_index;
+};
+
+namespace std {
+template <>
+struct less<SamplerUsedByImage> {
+    bool operator()(const SamplerUsedByImage &left, const SamplerUsedByImage &right) const { return false; }
+};
+}  // namespace std
+
+struct SAMPLER_STATE;
+struct DescriptorRequirement {
+    descriptor_req reqs;
+    bool is_writable;
+    std::vector<std::map<SamplerUsedByImage, const cvdescriptorset::Descriptor *>>
+        samplers_used_by_image;  // Copy from StageState.interface_var. It combines from plural shader stages.
+                                 // The index of array is index of image.
+
+    DescriptorRequirement() : reqs(descriptor_req(0)), is_writable(false) {}
+};
+
+inline bool operator==(const DescriptorRequirement &a, const DescriptorRequirement &b) NOEXCEPT { return a.reqs == b.reqs; }
+
+inline bool operator<(const DescriptorRequirement &a, const DescriptorRequirement &b) NOEXCEPT { return a.reqs < b.reqs; }
+
+typedef std::map<uint32_t, DescriptorRequirement> BindingReqMap;
 
 struct DESCRIPTOR_POOL_STATE : BASE_NODE {
     VkDescriptorPool pool;
@@ -206,21 +238,26 @@ struct DEVICE_MEMORY_STATE : public BASE_NODE {
     VkBuffer dedicated_buffer;
     VkImage dedicated_image;
     bool is_export;
+    bool is_import;
+    bool is_import_ahb;   // The VUID check depends on if the imported memory is for AHB
+    bool unprotected;     // can't be used for protected memory
+    bool multi_instance;  // Allocated from MULTI_INSTANCE heap or having more than one deviceMask bit set
     VkExternalMemoryHandleTypeFlags export_handle_type_flags;
+    VkExternalMemoryHandleTypeFlags import_handle_type_flags;
     std::unordered_set<VulkanTypedHandle> obj_bindings;  // objects bound to this memory
-    // Convenience vectors of handles to speed up iterating over objects independently
-    std::unordered_set<VkImage> bound_images;
-    std::unordered_set<VkBuffer> bound_buffers;
-    std::unordered_set<VkAccelerationStructureNV> bound_acceleration_structures;
+    // Images for alias search
+    std::unordered_set<IMAGE_STATE *> bound_images;
 
     MemRange mapped_range;
-    void *shadow_copy_base;    // Base of layer's allocation for guard band, data, and alignment space
-    void *shadow_copy;         // Pointer to start of guard-band data before mapped region
-    uint64_t shadow_pad_size;  // Size of the guard-band data before and after actual data. It MUST be a
-                               // multiple of limits.minMemoryMapAlignment
-    void *p_driver_data;       // Pointer to application's actual memory
+    void *shadow_copy_base;          // Base of layer's allocation for guard band, data, and alignment space
+    void *shadow_copy;               // Pointer to start of guard-band data before mapped region
+    uint64_t shadow_pad_size;        // Size of the guard-band data before and after actual data. It MUST be a
+                                     // multiple of limits.minMemoryMapAlignment
+    void *p_driver_data;             // Pointer to application's actual memory
+    VkDeviceSize fake_base_address;  // To allow a unified view of allocations, useful to Synchronization Validation
 
-    DEVICE_MEMORY_STATE(void *disp_object, const VkDeviceMemory in_mem, const VkMemoryAllocateInfo *p_alloc_info)
+    DEVICE_MEMORY_STATE(void *disp_object, const VkDeviceMemory in_mem, const VkMemoryAllocateInfo *p_alloc_info,
+                        uint64_t fake_address)
         : object(disp_object),
           mem(in_mem),
           alloc_info(p_alloc_info),
@@ -228,12 +265,18 @@ struct DEVICE_MEMORY_STATE : public BASE_NODE {
           dedicated_buffer(VK_NULL_HANDLE),
           dedicated_image(VK_NULL_HANDLE),
           is_export(false),
+          is_import(false),
+          is_import_ahb(false),
+          unprotected(true),
+          multi_instance(false),
           export_handle_type_flags(0),
+          import_handle_type_flags(0),
           mapped_range{},
           shadow_copy_base(0),
           shadow_copy(0),
           shadow_pad_size(0),
-          p_driver_data(0){};
+          p_driver_data(0),
+          fake_base_address(fake_address){};
 };
 
 // Generic memory binding struct to track objects bound to objects
@@ -243,14 +286,26 @@ struct MEM_BINDING {
     VkDeviceSize size;
 };
 
+class BUFFER_STATE;
 struct BufferBinding {
-    VkBuffer buffer;
+    std::shared_ptr<BUFFER_STATE> buffer_state;
     VkDeviceSize size;
     VkDeviceSize offset;
+    VkDeviceSize stride;
+
+    BufferBinding() : buffer_state(), size(0), offset(0), stride(0) {}
+    virtual ~BufferBinding() {}
+
+    virtual void reset() { *this = BufferBinding(); }
 };
 
 struct IndexBufferBinding : BufferBinding {
     VkIndexType index_type;
+
+    IndexBufferBinding() : BufferBinding(), index_type(static_cast<VkIndexType>(0)) {}
+    virtual ~IndexBufferBinding() {}
+
+    virtual void reset() override { *this = IndexBufferBinding(); }
 };
 
 inline bool operator==(MEM_BINDING a, MEM_BINDING b) NOEXCEPT {
@@ -283,6 +338,9 @@ class BINDABLE : public BASE_NODE {
     //  There's more data for sparse bindings so need better long-term solution
     // TODO : Need to update solution to track all sparse binding data
     std::unordered_set<MEM_BINDING> sparse_bindings;
+    // True if memory will be imported/exported from/to an Android Hardware Buffer
+    bool external_ahb;
+    bool unprotected;  // can't be used for protected memory
 
     small_unordered_set<DEVICE_MEMORY_STATE *, 1> bound_memory_set_;
 
@@ -293,6 +351,8 @@ class BINDABLE : public BASE_NODE {
           memory_requirements_checked(false),
           external_memory_handle(0),
           sparse_bindings{},
+          external_ahb(false),
+          unprotected(true),
           bound_memory_set_{} {};
 
     // Update the cached set of memory bindings.
@@ -302,7 +362,7 @@ class BINDABLE : public BASE_NODE {
         if (!sparse) {
             if (binding.mem_state) bound_memory_set_.insert(binding.mem_state.get());
         } else {
-            for (auto sb : sparse_bindings) {
+            for (const auto &sb : sparse_bindings) {
                 bound_memory_set_.insert(sb.mem_state.get());
             }
         }
@@ -331,7 +391,7 @@ class BUFFER_STATE : public BINDABLE {
             sparse = true;
         }
 
-        auto *externalMemoryInfo = lvl_find_in_chain<VkExternalMemoryBufferCreateInfo>(pCreateInfo->pNext);
+        auto *externalMemoryInfo = LvlFindInChain<VkExternalMemoryBufferCreateInfo>(pCreateInfo->pNext);
         if (externalMemoryInfo) {
             external_memory_handle = externalMemoryInfo->handleTypes;
         }
@@ -352,6 +412,7 @@ class BUFFER_VIEW_STATE : public BASE_NODE {
     VkBufferView buffer_view;
     VkBufferViewCreateInfo create_info;
     std::shared_ptr<BUFFER_STATE> buffer_state;
+    VkFormatFeatureFlags format_features;
     BUFFER_VIEW_STATE(const std::shared_ptr<BUFFER_STATE> &bf, VkBufferView bv, const VkBufferViewCreateInfo *ci)
         : buffer_view(bv), create_info(*ci), buffer_state(bf){};
     BUFFER_VIEW_STATE(const BUFFER_VIEW_STATE &rh_obj) = delete;
@@ -361,10 +422,13 @@ struct SAMPLER_STATE : public BASE_NODE {
     VkSampler sampler;
     VkSamplerCreateInfo createInfo;
     VkSamplerYcbcrConversion samplerConversion = VK_NULL_HANDLE;
+    VkSamplerCustomBorderColorCreateInfoEXT customCreateInfo = {};
 
     SAMPLER_STATE(const VkSampler *ps, const VkSamplerCreateInfo *pci) : sampler(*ps), createInfo(*pci) {
-        auto *conversionInfo = lvl_find_in_chain<VkSamplerYcbcrConversionInfo>(pci->pNext);
+        auto *conversionInfo = LvlFindInChain<VkSamplerYcbcrConversionInfo>(pci->pNext);
         if (conversionInfo) samplerConversion = conversionInfo->conversion;
+        auto cbci = LvlFindInChain<VkSamplerCustomBorderColorCreateInfoEXT>(pci->pNext);
+        if (cbci) customCreateInfo = *cbci;
     }
 };
 
@@ -380,7 +444,6 @@ class IMAGE_STATE : public BINDABLE {
     bool get_sparse_reqs_called;         // Track if GetImageSparseMemoryRequirements() has been called for this image
     bool sparse_metadata_required;       // Track if sparse metadata aspect is required for this image
     bool sparse_metadata_bound;          // Track if sparse metadata aspect is bound to this image
-    bool external_ahb;                   // True if image will be imported/exported from/to an Android Hardware Buffer
     bool has_ahb_format;                 // True if image was created with an external Android format
     bool is_swapchain_image;             // True if image is a swapchain image
     uint64_t ahb_format;                 // External Android format, if provided
@@ -389,20 +452,27 @@ class IMAGE_STATE : public BINDABLE {
     VkSwapchainKHR bind_swapchain;
     uint32_t bind_swapchain_imageIndex;
     image_layout_map::Encoder range_encoder;
+    VkFormatFeatureFlags format_features = 0;
     // Need to memory requirments for each plane if image is disjoint
+    bool disjoint;  // True if image was created with VK_IMAGE_CREATE_DISJOINT_BIT
     VkMemoryRequirements plane0_requirements;
-    bool plane0_memory_requirements_checked = false;
+    bool plane0_memory_requirements_checked;
     VkMemoryRequirements plane1_requirements;
-    bool plane1_memory_requirements_checked = false;
+    bool plane1_memory_requirements_checked;
     VkMemoryRequirements plane2_requirements;
-    bool plane2_memory_requirements_checked = false;
+    bool plane2_memory_requirements_checked;
+
+    const image_layout_map::Encoder subresource_encoder;                             // Subresource resolution encoder
+    std::unique_ptr<const subresource_adapter::ImageRangeEncoder> fragment_encoder;  // Fragment resolution encoder
+    const VkDevice store_device_as_workaround;                                       // TODO REMOVE WHEN encoder can be const
+    VkDeviceSize swapchain_fake_address;  // Needed for swapchain syncval, since there is no VkDeviceMemory::fake_base_address
 
     std::vector<VkSparseImageMemoryRequirements> sparse_requirements;
-    IMAGE_STATE(VkImage img, const VkImageCreateInfo *pCreateInfo);
+    IMAGE_STATE(VkDevice dev, VkImage img, const VkImageCreateInfo *pCreateInfo);
     IMAGE_STATE(IMAGE_STATE const &rh_obj) = delete;
 
-    std::unordered_set<VkImage> aliasing_images;
-    bool IsCompatibleAliasing(IMAGE_STATE *other_image_state);
+    std::unordered_set<IMAGE_STATE *> aliasing_images;
+    bool IsCompatibleAliasing(IMAGE_STATE *other_image_state) const;
 
     bool IsCreateInfoEqual(const VkImageCreateInfo &other_createInfo) const;
     bool IsCreateInfoDedicatedAllocationImageAliasingCompatible(const VkImageCreateInfo &other_createInfo) const;
@@ -461,43 +531,69 @@ class IMAGE_VIEW_STATE : public BASE_NODE {
     VkSampleCountFlagBits samples;
     unsigned descriptor_format_bits;
     VkSamplerYcbcrConversion samplerConversion;  // Handle of the ycbcr sampler conversion the image was created with, if any
+    VkFilterCubicImageViewImageFormatPropertiesEXT filter_cubic_props;
+    VkFormatFeatureFlags format_features;
+    VkImageUsageFlags inherited_usage;  // from spec #resources-image-inherited-usage
     std::shared_ptr<IMAGE_STATE> image_state;
     IMAGE_VIEW_STATE(const std::shared_ptr<IMAGE_STATE> &image_state, VkImageView iv, const VkImageViewCreateInfo *ci);
     IMAGE_VIEW_STATE(const IMAGE_VIEW_STATE &rh_obj) = delete;
+
+    bool OverlapSubresource(const IMAGE_VIEW_STATE &compare_view) const;
 };
 
 class ACCELERATION_STRUCTURE_STATE : public BINDABLE {
   public:
     VkAccelerationStructureNV acceleration_structure;
-    safe_VkAccelerationStructureCreateInfoNV create_infoNV;
-    safe_VkAccelerationStructureCreateInfoKHR create_infoKHR;
-    bool memory_requirements_checked = false;
-    VkMemoryRequirements2KHR memory_requirements;
-    bool build_scratch_memory_requirements_checked = false;
-    VkMemoryRequirements2KHR build_scratch_memory_requirements;
-    bool update_scratch_memory_requirements_checked = false;
-    VkMemoryRequirements2KHR update_scratch_memory_requirements;
-    bool built = false;
+    safe_VkAccelerationStructureCreateInfoNV create_infoNV = {};
     safe_VkAccelerationStructureInfoNV build_info;
+    bool memory_requirements_checked = false;
+    VkMemoryRequirements2 memory_requirements;
+    bool build_scratch_memory_requirements_checked = false;
+    VkMemoryRequirements2 build_scratch_memory_requirements;
+    bool update_scratch_memory_requirements_checked = false;
+    VkMemoryRequirements2 update_scratch_memory_requirements;
+    bool built = false;
     uint64_t opaque_handle = 0;
+    const VkAllocationCallbacks *allocator = NULL;
     ACCELERATION_STRUCTURE_STATE(VkAccelerationStructureNV as, const VkAccelerationStructureCreateInfoNV *ci)
         : acceleration_structure(as),
           create_infoNV(ci),
           memory_requirements{},
           build_scratch_memory_requirements_checked{},
-          update_scratch_memory_requirements_checked{} {}
-    ACCELERATION_STRUCTURE_STATE(VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci)
+          build_scratch_memory_requirements{},
+          update_scratch_memory_requirements_checked{},
+          update_scratch_memory_requirements{} {}
+    ACCELERATION_STRUCTURE_STATE(const ACCELERATION_STRUCTURE_STATE &rh_obj) = delete;
+};
+
+class ACCELERATION_STRUCTURE_STATE_KHR : public BINDABLE {
+  public:
+    VkAccelerationStructureKHR acceleration_structure;
+    safe_VkAccelerationStructureCreateInfoKHR create_infoKHR = {};
+    safe_VkAccelerationStructureBuildGeometryInfoKHR build_info_khr;
+    bool memory_requirements_checked = false;
+    VkMemoryRequirements2 memory_requirements;
+    bool build_scratch_memory_requirements_checked = false;
+    VkMemoryRequirements2 build_scratch_memory_requirements;
+    bool update_scratch_memory_requirements_checked = false;
+    VkMemoryRequirements2 update_scratch_memory_requirements;
+    bool built = false;
+    uint64_t opaque_handle = 0;
+    const VkAllocationCallbacks *allocator = NULL;
+    ACCELERATION_STRUCTURE_STATE_KHR(VkAccelerationStructureKHR as, const VkAccelerationStructureCreateInfoKHR *ci)
         : acceleration_structure(as),
           create_infoKHR(ci),
           memory_requirements{},
           build_scratch_memory_requirements_checked{},
-          update_scratch_memory_requirements_checked{} {}
-    ACCELERATION_STRUCTURE_STATE(const ACCELERATION_STRUCTURE_STATE &rh_obj) = delete;
+          build_scratch_memory_requirements{},
+          update_scratch_memory_requirements_checked{},
+          update_scratch_memory_requirements{} {}
+    ACCELERATION_STRUCTURE_STATE_KHR(const ACCELERATION_STRUCTURE_STATE_KHR &rh_obj) = delete;
 };
 
 struct SWAPCHAIN_IMAGE {
-    VkImage image;
-    std::unordered_set<VkImage> bound_images;
+    IMAGE_STATE *image_state = nullptr;
+    std::unordered_set<IMAGE_STATE *> bound_images;
 };
 
 class SWAPCHAIN_NODE : public BASE_NODE {
@@ -507,13 +603,10 @@ class SWAPCHAIN_NODE : public BASE_NODE {
     std::vector<SWAPCHAIN_IMAGE> images;
     bool retired = false;
     bool shared_presentable = false;
-    CALL_STATE vkGetSwapchainImagesKHRState = UNCALLED;
     uint32_t get_swapchain_image_count = 0;
     SWAPCHAIN_NODE(const VkSwapchainCreateInfoKHR *pCreateInfo, VkSwapchainKHR swapchain)
         : createInfo(pCreateInfo), swapchain(swapchain) {}
 };
-
-extern bool ImageLayoutMatches(const VkImageAspectFlags aspect_mask, VkImageLayout a, VkImageLayout b);
 
 // Store the DAG.
 struct DAGNode {
@@ -522,21 +615,54 @@ struct DAGNode {
     std::vector<uint32_t> next;
 };
 
+struct SubpassDependencyGraphNode {
+    uint32_t pass;
+    struct Dependency {
+        const VkSubpassDependency2 *dependency;
+        const SubpassDependencyGraphNode *node;
+        Dependency() = default;
+        Dependency(const VkSubpassDependency2 *dependency_, const SubpassDependencyGraphNode *node_)
+            : dependency(dependency_), node(node_) {}
+    };
+    std::map<const SubpassDependencyGraphNode *, std::vector<const VkSubpassDependency2 *>> prev;
+    std::map<const SubpassDependencyGraphNode *, std::vector<const VkSubpassDependency2 *>> next;
+    std::vector<uint32_t> async;  // asynchronous subpasses with a lower subpass index
+
+    std::vector<const VkSubpassDependency2 *> barrier_from_external;
+    std::vector<const VkSubpassDependency2 *> barrier_to_external;
+    std::unique_ptr<VkSubpassDependency2> implicit_barrier_from_external;
+    std::unique_ptr<VkSubpassDependency2> implicit_barrier_to_external;
+};
+
 struct RENDER_PASS_STATE : public BASE_NODE {
+    struct AttachmentTransition {
+        uint32_t prev_pass;
+        uint32_t attachment;
+        VkImageLayout old_layout;
+        VkImageLayout new_layout;
+        AttachmentTransition(uint32_t prev_pass_, uint32_t attachment_, VkImageLayout old_layout_, VkImageLayout new_layout_)
+            : prev_pass(prev_pass_), attachment(attachment_), old_layout(old_layout_), new_layout(new_layout_) {}
+    };
+
     VkRenderPass renderPass;
     safe_VkRenderPassCreateInfo2 createInfo;
     std::vector<std::vector<uint32_t>> self_dependencies;
     std::vector<DAGNode> subpassToNode;
     std::unordered_map<uint32_t, bool> attachment_first_read;
+    std::vector<uint32_t> attachment_first_subpass;
+    std::vector<uint32_t> attachment_last_subpass;
+    std::vector<bool> attachment_first_is_transition;
+    std::vector<SubpassDependencyGraphNode> subpass_dependencies;
+    std::vector<std::vector<AttachmentTransition>> subpass_transitions;
 
-    RENDER_PASS_STATE(VkRenderPassCreateInfo2KHR const *pCreateInfo) : createInfo(pCreateInfo) {}
+    RENDER_PASS_STATE(VkRenderPassCreateInfo2 const *pCreateInfo) : createInfo(pCreateInfo) {}
     RENDER_PASS_STATE(VkRenderPassCreateInfo const *pCreateInfo) {
         ConvertVkRenderPassCreateInfoToV2KHR(*pCreateInfo, &createInfo);
     }
 };
 
 // Autogenerated as part of the vk_validation_error_message.h codegen
-enum CMD_TYPE { VUID_CMD_ENUM_LIST(CMD_) };
+const char *CommandTypeString(CMD_TYPE type);
 
 enum CB_STATE {
     CB_NEW,                 // Newly created CB w/o any cmds
@@ -550,24 +676,43 @@ enum CB_STATE {
 typedef VkFlags CBStatusFlags;
 enum CBStatusFlagBits {
     // clang-format off
-    CBSTATUS_NONE                   = 0x00000000,   // No status is set
-    CBSTATUS_LINE_WIDTH_SET         = 0x00000001,   // Line width has been set
-    CBSTATUS_DEPTH_BIAS_SET         = 0x00000002,   // Depth bias has been set
-    CBSTATUS_BLEND_CONSTANTS_SET    = 0x00000004,   // Blend constants state has been set
-    CBSTATUS_DEPTH_BOUNDS_SET       = 0x00000008,   // Depth bounds state object has been set
-    CBSTATUS_STENCIL_READ_MASK_SET  = 0x00000010,   // Stencil read mask has been set
-    CBSTATUS_STENCIL_WRITE_MASK_SET = 0x00000020,   // Stencil write mask has been set
-    CBSTATUS_STENCIL_REFERENCE_SET  = 0x00000040,   // Stencil reference has been set
-    CBSTATUS_VIEWPORT_SET           = 0x00000080,
-    CBSTATUS_SCISSOR_SET            = 0x00000100,
-    CBSTATUS_INDEX_BUFFER_BOUND     = 0x00000200,   // Index buffer has been set
-    CBSTATUS_EXCLUSIVE_SCISSOR_SET  = 0x00000400,
-    CBSTATUS_SHADING_RATE_PALETTE_SET = 0x00000800,
-    CBSTATUS_LINE_STIPPLE_SET       = 0x00001000,
-    CBSTATUS_VIEWPORT_W_SCALING_SET = 0x00002000,
-    CBSTATUS_ALL_STATE_SET          = 0x00003DFF,   // All state set (intentionally exclude index buffer)
+    CBSTATUS_NONE                            = 0x00000000,   // No status is set
+    CBSTATUS_LINE_WIDTH_SET                  = 0x00000001,   // Line width has been set
+    CBSTATUS_DEPTH_BIAS_SET                  = 0x00000002,   // Depth bias has been set
+    CBSTATUS_BLEND_CONSTANTS_SET             = 0x00000004,   // Blend constants state has been set
+    CBSTATUS_DEPTH_BOUNDS_SET                = 0x00000008,   // Depth bounds state object has been set
+    CBSTATUS_STENCIL_READ_MASK_SET           = 0x00000010,   // Stencil read mask has been set
+    CBSTATUS_STENCIL_WRITE_MASK_SET          = 0x00000020,   // Stencil write mask has been set
+    CBSTATUS_STENCIL_REFERENCE_SET           = 0x00000040,   // Stencil reference has been set
+    CBSTATUS_VIEWPORT_SET                    = 0x00000080,
+    CBSTATUS_SCISSOR_SET                     = 0x00000100,
+    CBSTATUS_INDEX_BUFFER_BOUND              = 0x00000200,   // Index buffer has been set
+    CBSTATUS_EXCLUSIVE_SCISSOR_SET           = 0x00000400,
+    CBSTATUS_SHADING_RATE_PALETTE_SET        = 0x00000800,
+    CBSTATUS_LINE_STIPPLE_SET                = 0x00001000,
+    CBSTATUS_VIEWPORT_W_SCALING_SET          = 0x00002000,
+    CBSTATUS_CULL_MODE_SET                   = 0x00004000,
+    CBSTATUS_FRONT_FACE_SET                  = 0x00008000,
+    CBSTATUS_PRIMITIVE_TOPOLOGY_SET          = 0x00010000,
+    CBSTATUS_VIEWPORT_WITH_COUNT_SET         = 0x00020000,
+    CBSTATUS_SCISSOR_WITH_COUNT_SET          = 0x00040000,
+    CBSTATUS_VERTEX_INPUT_BINDING_STRIDE_SET = 0x00080000,
+    CBSTATUS_DEPTH_TEST_ENABLE_SET           = 0x00100000,
+    CBSTATUS_DEPTH_WRITE_ENABLE_SET          = 0x00200000,
+    CBSTATUS_DEPTH_COMPARE_OP_SET            = 0x00400000,
+    CBSTATUS_DEPTH_BOUNDS_TEST_ENABLE_SET    = 0x00800000,
+    CBSTATUS_STENCIL_TEST_ENABLE_SET         = 0x01000000,
+    CBSTATUS_STENCIL_OP_SET                  = 0x02000000,
+    CBSTATUS_DISCARD_RECTANGLE_SET           = 0x04000000,
+    CBSTATUS_SAMPLE_LOCATIONS_SET            = 0x08000000,
+    CBSTATUS_COARSE_SAMPLE_ORDER_SET         = 0x10000000,
+    CBSTATUS_ALL_STATE_SET                   = 0x1FFFFDFF,   // All state set (intentionally exclude index buffer)
     // clang-format on
 };
+
+VkDynamicState ConvertToDynamicState(CBStatusFlagBits flag);
+CBStatusFlagBits ConvertToCBStatusFlagBits(VkDynamicState state);
+std::string DynamicStateString(CBStatusFlags input_value);
 
 struct QueryObject {
     VkQueryPool pool;
@@ -707,17 +852,37 @@ struct PIPELINE_LAYOUT_STATE : public BASE_NODE {
         compat_for_set.clear();
     }
 };
+
 // Shader typedefs needed to store StageStage below
 struct interface_var {
     uint32_t id;
     uint32_t type_id;
     uint32_t offset;
+
+    std::vector<std::set<SamplerUsedByImage>> samplers_used_by_image;  // List of samplers that sample a given image.
+                                                                       // The index of array is index of image.
+
     bool is_patch;
     bool is_block_member;
     bool is_relaxed_precision;
+    bool is_writable;
+    bool is_atomic_operation;
+    bool is_sampler_implicitLod_dref_proj;
+    bool is_sampler_bias_offset;
     // TODO: collect the name, too? Isn't required to be present.
+
+    interface_var()
+        : id(0),
+          type_id(0),
+          offset(0),
+          is_patch(false),
+          is_block_member(false),
+          is_relaxed_precision(false),
+          is_writable(false),
+          is_atomic_operation(false),
+          is_sampler_implicitLod_dref_proj(false),
+          is_sampler_bias_offset(false) {}
 };
-typedef std::pair<unsigned, unsigned> descriptor_slot_t;
 
 // Safe struct that spans NV and KHR VkRayTracingPipelineCreateInfo structures.
 // It is a safe_VkRayTracingPipelineCreateInfoKHR and supports construction from
@@ -770,14 +935,20 @@ class safe_VkRayTracingPipelineCreateInfoCommon : public safe_VkRayTracingPipeli
     void initialize(const VkRayTracingPipelineCreateInfoKHR *pCreateInfo) {
         safe_VkRayTracingPipelineCreateInfoKHR::initialize(pCreateInfo);
     }
+    uint32_t maxRecursionDepth;  // NV specific
 };
 
+struct SHADER_MODULE_STATE;
 class PIPELINE_STATE : public BASE_NODE {
   public:
     struct StageState {
         std::unordered_set<uint32_t> accessible_ids;
         std::vector<std::pair<descriptor_slot_t, interface_var>> descriptor_uses;
         bool has_writable_descriptor;
+        bool has_atomic_descriptor;
+        VkShaderStageFlagBits stage_flag;
+        std::string entry_point_name;
+        std::shared_ptr<const SHADER_MODULE_STATE> shader_state;
     };
 
     VkPipeline pipeline;
@@ -794,15 +965,19 @@ class PIPELINE_STATE : public BASE_NODE {
     uint32_t max_active_slot;  // the highest set number in active_slots for pipeline layout compatibility checks
     // Additional metadata needed by pipeline_state initialization and validation
     std::vector<StageState> stage_state;
+    std::unordered_set<uint32_t> fragmentShader_writable_output_location_list;
     // Vtx input info (if any)
     std::vector<VkVertexInputBindingDescription> vertex_binding_descriptions_;
     std::vector<VkVertexInputAttributeDescription> vertex_attribute_descriptions_;
     std::vector<VkDeviceSize> vertex_attribute_alignments_;
     std::unordered_map<uint32_t, uint32_t> vertex_binding_to_index_map_;
     std::vector<VkPipelineColorBlendAttachmentState> attachments;
+    std::unordered_set<VkShaderStageFlagBits, hash_util::HashCombiner::WrappedHash<VkShaderStageFlagBits>>
+        wrote_primitive_shading_rate;
     bool blendConstantsEnabled;  // Blend constants enabled for any attachments
     std::shared_ptr<const PIPELINE_LAYOUT_STATE> pipeline_layout;
     VkPrimitiveTopology topology_at_rasterizer;
+    VkBool32 sample_location_enabled;
 
     // Default constructor
     PIPELINE_STATE()
@@ -821,7 +996,8 @@ class PIPELINE_STATE : public BASE_NODE {
           attachments(),
           blendConstantsEnabled(false),
           pipeline_layout(),
-          topology_at_rasterizer{} {}
+          topology_at_rasterizer{},
+          sample_location_enabled(VK_FALSE) {}
 
     void reset() {
         VkGraphicsPipelineCreateInfo emptyGraphicsCI = {};
@@ -831,6 +1007,7 @@ class PIPELINE_STATE : public BASE_NODE {
         VkRayTracingPipelineCreateInfoKHR emptyRayTracingCI = {};
         raytracingPipelineCI.initialize(&emptyRayTracingCI);
         stage_state.clear();
+        fragmentShader_writable_output_location_list.clear();
     }
 
     void initGraphicsPipeline(const ValidationStateTracker *state_data, const VkGraphicsPipelineCreateInfo *pCreateInfo,
@@ -858,7 +1035,8 @@ class PIPELINE_STATE : public BASE_NODE {
             return graphicsPipelineCI.flags;
         else if (computePipelineCI.sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO)
             return computePipelineCI.flags;
-        else if (raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV)
+        else if ((raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_NV) ||
+                 (raytracingPipelineCI.sType == VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR))
             return raytracingPipelineCI.flags;
         else
             return 0;
@@ -913,6 +1091,8 @@ struct LAST_BOUND_STATE {
         }
         push_descriptor_set.reset(ds);
     }
+
+    inline bool IsUsing() const { return pipeline_state ? true : false; }
 };
 
 static inline bool CompatForSet(uint32_t set, const LAST_BOUND_STATE &a, const std::vector<PipelineLayoutCompatId> &b) {
@@ -930,20 +1110,16 @@ static inline bool CompatForSet(uint32_t set, const PIPELINE_LAYOUT_STATE *a, co
 // Types to store queue family ownership (QFO) Transfers
 
 // Common to image and buffer memory barriers
-template <typename Handle, typename Barrier>
+template <typename Handle>
 struct QFOTransferBarrierBase {
     using HandleType = Handle;
-    using BarrierType = Barrier;
-    struct Tag {};
-    HandleType handle = VK_NULL_HANDLE;
+    Handle handle = VK_NULL_HANDLE;
     uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
     QFOTransferBarrierBase() = default;
-    QFOTransferBarrierBase(const BarrierType &barrier, const HandleType &resource_handle)
-        : handle(resource_handle),
-          srcQueueFamilyIndex(barrier.srcQueueFamilyIndex),
-          dstQueueFamilyIndex(barrier.dstQueueFamilyIndex) {}
+    QFOTransferBarrierBase(const Handle &resource_handle, uint32_t src, uint32_t dst)
+        : handle(resource_handle), srcQueueFamilyIndex(src), dstQueueFamilyIndex(dst) {}
 
     hash_util::HashCombiner base_hash_combiner() const {
         hash_util::HashCombiner hc;
@@ -951,26 +1127,27 @@ struct QFOTransferBarrierBase {
         return hc;
     }
 
-    bool operator==(const QFOTransferBarrierBase &rhs) const {
+    bool operator==(const QFOTransferBarrierBase<Handle> &rhs) const {
         return (srcQueueFamilyIndex == rhs.srcQueueFamilyIndex) && (dstQueueFamilyIndex == rhs.dstQueueFamilyIndex) &&
                (handle == rhs.handle);
     }
 };
 
-template <typename Barrier>
-struct QFOTransferBarrier {};
-
 // Image barrier specific implementation
-template <>
-struct QFOTransferBarrier<VkImageMemoryBarrier> : public QFOTransferBarrierBase<VkImage, VkImageMemoryBarrier> {
-    using BaseType = QFOTransferBarrierBase<VkImage, VkImageMemoryBarrier>;
+struct QFOImageTransferBarrier : public QFOTransferBarrierBase<VkImage> {
+    using BaseType = QFOTransferBarrierBase<VkImage>;
     VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageLayout newLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     VkImageSubresourceRange subresourceRange;
 
-    QFOTransferBarrier() = default;
-    QFOTransferBarrier(const BarrierType &barrier)
-        : BaseType(barrier, barrier.image),
+    QFOImageTransferBarrier() = default;
+    QFOImageTransferBarrier(const VkImageMemoryBarrier &barrier)
+        : BaseType(barrier.image, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
+          oldLayout(barrier.oldLayout),
+          newLayout(barrier.newLayout),
+          subresourceRange(barrier.subresourceRange) {}
+    QFOImageTransferBarrier(const VkImageMemoryBarrier2KHR &barrier)
+        : BaseType(barrier.image, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
           oldLayout(barrier.oldLayout),
           newLayout(barrier.newLayout),
           subresourceRange(barrier.subresourceRange) {}
@@ -980,7 +1157,7 @@ struct QFOTransferBarrier<VkImageMemoryBarrier> : public QFOTransferBarrierBase<
         auto hc = base_hash_combiner() << subresourceRange;
         return hc.Value();
     }
-    bool operator==(const QFOTransferBarrier<BarrierType> &rhs) const {
+    bool operator==(const QFOImageTransferBarrier &rhs) const {
         // Ignoring layout w.r.t. equality. See comment in hash above.
         return (static_cast<BaseType>(*this) == static_cast<BaseType>(rhs)) && (subresourceRange == rhs.subresourceRange);
     }
@@ -998,18 +1175,24 @@ struct QFOTransferBarrier<VkImageMemoryBarrier> : public QFOTransferBarrierBase<
 };
 
 // Buffer barrier specific implementation
-template <>
-struct QFOTransferBarrier<VkBufferMemoryBarrier> : public QFOTransferBarrierBase<VkBuffer, VkBufferMemoryBarrier> {
-    using BaseType = QFOTransferBarrierBase<VkBuffer, VkBufferMemoryBarrier>;
+struct QFOBufferTransferBarrier : public QFOTransferBarrierBase<VkBuffer> {
+    using BaseType = QFOTransferBarrierBase<VkBuffer>;
     VkDeviceSize offset = 0;
     VkDeviceSize size = 0;
-    QFOTransferBarrier(const VkBufferMemoryBarrier &barrier)
-        : BaseType(barrier, barrier.buffer), offset(barrier.offset), size(barrier.size) {}
+    QFOBufferTransferBarrier() = default;
+    QFOBufferTransferBarrier(const VkBufferMemoryBarrier &barrier)
+        : BaseType(barrier.buffer, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
+          offset(barrier.offset),
+          size(barrier.size) {}
+    QFOBufferTransferBarrier(const VkBufferMemoryBarrier2KHR &barrier)
+        : BaseType(barrier.buffer, barrier.srcQueueFamilyIndex, barrier.dstQueueFamilyIndex),
+          offset(barrier.offset),
+          size(barrier.size) {}
     size_t hash() const {
         auto hc = base_hash_combiner() << offset << size;
         return hc.Value();
     }
-    bool operator==(const QFOTransferBarrier<BarrierType> &rhs) const {
+    bool operator==(const QFOBufferTransferBarrier &rhs) const {
         return (static_cast<BaseType>(*this) == static_cast<BaseType>(rhs)) && (offset == rhs.offset) && (size == rhs.size);
     }
     static const char *BarrierName() { return "VkBufferMemoryBarrier"; }
@@ -1024,16 +1207,17 @@ struct QFOTransferBarrier<VkBufferMemoryBarrier> : public QFOTransferBarrierBase
     static const char *ErrMsgMissingQFOReleaseInSubmit() { return "UNASSIGNED-VkBufferMemoryBarrier-buffer-00004"; }
 };
 
-template <typename Barrier>
-using QFOTransferBarrierHash = hash_util::HasHashMember<QFOTransferBarrier<Barrier>>;
+template <typename TransferBarrier>
+using QFOTransferBarrierHash = hash_util::HasHashMember<TransferBarrier>;
 
 // Command buffers store the set of barriers recorded
-template <typename Barrier>
-using QFOTransferBarrierSet = std::unordered_set<QFOTransferBarrier<Barrier>, QFOTransferBarrierHash<Barrier>>;
-template <typename Barrier>
+template <typename TransferBarrier>
+using QFOTransferBarrierSet = std::unordered_set<TransferBarrier, QFOTransferBarrierHash<TransferBarrier>>;
+
+template <typename TransferBarrier>
 struct QFOTransferBarrierSets {
-    QFOTransferBarrierSet<Barrier> release;
-    QFOTransferBarrierSet<Barrier> acquire;
+    QFOTransferBarrierSet<TransferBarrier> release;
+    QFOTransferBarrierSet<TransferBarrier> acquire;
     void Reset() {
         acquire.clear();
         release.clear();
@@ -1041,38 +1225,69 @@ struct QFOTransferBarrierSets {
 };
 
 // The layer_data stores the map of pending release barriers
-template <typename Barrier>
+template <typename TransferBarrier>
 using GlobalQFOTransferBarrierMap =
-    std::unordered_map<typename QFOTransferBarrier<Barrier>::HandleType, QFOTransferBarrierSet<Barrier>>;
+    std::unordered_map<typename TransferBarrier::HandleType, QFOTransferBarrierSet<TransferBarrier>>;
 
 // Submit queue uses the Scoreboard to track all release/acquire operations in a batch.
-template <typename Barrier>
+template <typename TransferBarrier>
 using QFOTransferCBScoreboard =
-    std::unordered_map<QFOTransferBarrier<Barrier>, const CMD_BUFFER_STATE *, QFOTransferBarrierHash<Barrier>>;
-template <typename Barrier>
+    std::unordered_map<TransferBarrier, const CMD_BUFFER_STATE *, QFOTransferBarrierHash<TransferBarrier>>;
+
+template <typename TransferBarrier>
 struct QFOTransferCBScoreboards {
-    QFOTransferCBScoreboard<Barrier> acquire;
-    QFOTransferCBScoreboard<Barrier> release;
+    QFOTransferCBScoreboard<TransferBarrier> acquire;
+    QFOTransferCBScoreboard<TransferBarrier> release;
 };
 
 typedef std::map<QueryObject, QueryState> QueryMap;
-typedef std::unordered_map<VkEvent, VkPipelineStageFlags> EventToStageMap;
+typedef std::unordered_map<VkEvent, VkPipelineStageFlags2KHR> EventToStageMap;
 typedef ImageSubresourceLayoutMap::LayoutMap GlobalImageLayoutRangeMap;
-typedef std::unordered_map<VkImage, std::unique_ptr<GlobalImageLayoutRangeMap>> GlobalImageLayoutMap;
-typedef std::unordered_map<VkImage, std::unique_ptr<ImageSubresourceLayoutMap>> CommandBufferImageLayoutMap;
+typedef std::unordered_map<VkImage, Optional<GlobalImageLayoutRangeMap>> GlobalImageLayoutMap;
 
+typedef std::unordered_map<VkImage, Optional<ImageSubresourceLayoutMap>> CommandBufferImageLayoutMap;
+
+enum LvlBindPoint {
+    BindPoint_Graphics = VK_PIPELINE_BIND_POINT_GRAPHICS,
+    BindPoint_Compute = VK_PIPELINE_BIND_POINT_COMPUTE,
+    BindPoint_Ray_Tracing = 2,
+    BindPoint_Count = 3,
+};
+
+static VkPipelineBindPoint inline ConvertToPipelineBindPoint(LvlBindPoint bind_point) {
+    switch (bind_point) {
+        case BindPoint_Ray_Tracing:
+            return VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR;
+        default:
+            return static_cast<VkPipelineBindPoint>(bind_point);
+    }
+    return VK_PIPELINE_BIND_POINT_MAX_ENUM;
+}
+
+static LvlBindPoint inline ConvertToLvlBindPoint(VkPipelineBindPoint bind_point) {
+    switch (bind_point) {
+        case VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR:
+            return BindPoint_Ray_Tracing;
+        default:
+            return static_cast<LvlBindPoint>(bind_point);
+    }
+    return LvlBindPoint(~0U);
+}
+
+struct SUBPASS_INFO;
+class FRAMEBUFFER_STATE;
 // Cmd Buffer Wrapper Struct - TODO : This desperately needs its own class
 struct CMD_BUFFER_STATE : public BASE_NODE {
     VkCommandBuffer commandBuffer;
     VkCommandBufferAllocateInfo createInfo = {};
     VkCommandBufferBeginInfo beginInfo;
     VkCommandBufferInheritanceInfo inheritanceInfo;
-    VkDevice device;  // device this CB belongs to
     std::shared_ptr<const COMMAND_POOL_STATE> command_pool;
     bool hasDrawCmd;
     bool hasTraceRaysCmd;
     bool hasBuildAccelerationStructureCmd;
     bool hasDispatchCmd;
+    bool unprotected;  // can't be used for protected memory
 
     CB_STATE state;         // Track cmd buffer update state
     uint64_t commandCount;  // Number of commands recorded
@@ -1082,34 +1297,49 @@ struct CMD_BUFFER_STATE : public BASE_NODE {
     CBStatusFlags status;                              // Track status of various bindings on cmd buffer
     CBStatusFlags static_status;                       // All state bits provided by current graphics pipeline
                                                        // rather than dynamic state
+    CBStatusFlags dynamic_status;                      // dynamic state set up in pipeline
     // Currently storing "lastBound" objects on per-CB basis
     //  long-term may want to create caches of "lastBound" states and could have
     //  each individual CMD_NODE referencing its own "lastBound" state
     // Store last bound state for Gfx & Compute pipeline bind points
-    std::map<uint32_t, LAST_BOUND_STATE> lastBound;
+    std::array<LAST_BOUND_STATE, BindPoint_Count> lastBound;  // index is LvlBindPoint.
 
-    using Bindings = std::map<uint32_t, descriptor_req>;
-    using Pipelines_Bindings = std::map<VkPipeline, Bindings>;
-    std::unordered_map<VkDescriptorSet, Pipelines_Bindings> validate_descriptorsets_in_queuesubmit;
+    struct CmdDrawDispatchInfo {
+        CMD_TYPE cmd_type;
+        std::string function;
+        std::vector<std::pair<const uint32_t, DescriptorRequirement>> binding_infos;
+        VkFramebuffer framebuffer;
+        std::shared_ptr<std::vector<SUBPASS_INFO>> subpasses;
+        std::shared_ptr<std::vector<IMAGE_VIEW_STATE *>> attachments;
+    };
+    std::unordered_map<VkDescriptorSet, std::vector<CmdDrawDispatchInfo>> validate_descriptorsets_in_queuesubmit;
 
     uint32_t viewportMask;
+    uint32_t viewportWithCountMask;
+    uint32_t viewportWithCountCount;
     uint32_t scissorMask;
+    uint32_t scissorWithCountMask;
     uint32_t initial_device_mask;
+    VkPrimitiveTopology primitiveTopology;
 
     safe_VkRenderPassBeginInfo activeRenderPassBeginInfo;
-    RENDER_PASS_STATE *activeRenderPass;
+    std::shared_ptr<RENDER_PASS_STATE> activeRenderPass;
+    std::shared_ptr<std::vector<SUBPASS_INFO>> active_subpasses;
+    std::shared_ptr<std::vector<IMAGE_VIEW_STATE *>> active_attachments;
+    std::set<std::shared_ptr<IMAGE_VIEW_STATE>> attachments_view_states;
+
     VkSubpassContents activeSubpassContents;
     uint32_t active_render_pass_device_mask;
     uint32_t activeSubpass;
-    VkFramebuffer activeFramebuffer;
-    std::unordered_set<VkFramebuffer> framebuffers;
+    std::shared_ptr<FRAMEBUFFER_STATE> activeFramebuffer;
+    std::unordered_set<std::shared_ptr<FRAMEBUFFER_STATE>> framebuffers;
     // Unified data structs to track objects bound to this command buffer as well as object
     //  dependencies that have been broken : either destroyed objects, or updated descriptor sets
     std::vector<VulkanTypedHandle> object_bindings;
     std::vector<VulkanTypedHandle> broken_bindings;
 
-    QFOTransferBarrierSets<VkBufferMemoryBarrier> qfo_transfer_buffer_barriers;
-    QFOTransferBarrierSets<VkImageMemoryBarrier> qfo_transfer_image_barriers;
+    QFOTransferBarrierSets<QFOBufferTransferBarrier> qfo_transfer_buffer_barriers;
+    QFOTransferBarrierSets<QFOImageTransferBarrier> qfo_transfer_image_barriers;
 
     std::unordered_set<VkEvent> waitedEvents;
     std::vector<VkEvent> writeEventsBeforeWait;
@@ -1128,7 +1358,7 @@ struct CMD_BUFFER_STATE : public BASE_NODE {
     std::vector<std::function<bool(const ValidationStateTracker *device_data, const class QUEUE_STATE *queue_state)>>
         queue_submit_functions;
     // Validation functions run when secondary CB is executed in primary
-    std::vector<std::function<bool(const CMD_BUFFER_STATE *, VkFramebuffer)>> cmd_execute_commands_functions;
+    std::vector<std::function<bool(const CMD_BUFFER_STATE *, const FRAMEBUFFER_STATE *)>> cmd_execute_commands_functions;
     std::vector<
         std::function<bool(const ValidationStateTracker *device_data, bool do_validate, EventToStageMap *localEventToStageMap)>>
         eventUpdates;
@@ -1147,29 +1377,36 @@ struct CMD_BUFFER_STATE : public BASE_NODE {
     std::vector<uint8_t> push_constant_data;
     PushConstantRangesId push_constant_data_ranges;
 
+    std::map<VkShaderStageFlagBits, std::vector<uint8_t>>
+        push_constant_data_update;  // vector's value is enum PushConstantByteState.
+    VkPipelineLayout push_constant_pipeline_layout_set;
+
     // Used for Best Practices tracking
     uint32_t small_indexed_draw_call_count;
+
+    bool transform_feedback_active{false};
 };
 
-static inline const QFOTransferBarrierSets<VkImageMemoryBarrier> &GetQFOBarrierSets(
-    const CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkImageMemoryBarrier>::Tag &type_tag) {
+static inline const QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(const CMD_BUFFER_STATE *cb,
+                                                                                       const QFOImageTransferBarrier &type_tag) {
     return cb->qfo_transfer_image_barriers;
 }
-static inline const QFOTransferBarrierSets<VkBufferMemoryBarrier> &GetQFOBarrierSets(
-    const CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkBufferMemoryBarrier>::Tag &type_tag) {
+static inline const QFOTransferBarrierSets<QFOBufferTransferBarrier> &GetQFOBarrierSets(const CMD_BUFFER_STATE *cb,
+                                                                                        const QFOBufferTransferBarrier &type_tag) {
     return cb->qfo_transfer_buffer_barriers;
 }
-static inline QFOTransferBarrierSets<VkImageMemoryBarrier> &GetQFOBarrierSets(
-    CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkImageMemoryBarrier>::Tag &type_tag) {
+static inline QFOTransferBarrierSets<QFOImageTransferBarrier> &GetQFOBarrierSets(CMD_BUFFER_STATE *cb,
+                                                                                 const QFOImageTransferBarrier &type_tag) {
     return cb->qfo_transfer_image_barriers;
 }
-static inline QFOTransferBarrierSets<VkBufferMemoryBarrier> &GetQFOBarrierSets(
-    CMD_BUFFER_STATE *cb, const QFOTransferBarrier<VkBufferMemoryBarrier>::Tag &type_tag) {
+static inline QFOTransferBarrierSets<QFOBufferTransferBarrier> &GetQFOBarrierSets(CMD_BUFFER_STATE *cb,
+                                                                                  const QFOBufferTransferBarrier &type_tag) {
     return cb->qfo_transfer_buffer_barriers;
 }
 
 struct SEMAPHORE_WAIT {
     VkSemaphore semaphore;
+    VkSemaphoreType type;
     VkQueue queue;
     uint64_t payload;
     uint64_t seq;
@@ -1182,15 +1419,8 @@ struct SEMAPHORE_SIGNAL {
 };
 
 struct CB_SUBMISSION {
-    CB_SUBMISSION(std::vector<VkCommandBuffer> const &cbs, std::vector<SEMAPHORE_WAIT> const &waitSemaphores,
-                  std::vector<SEMAPHORE_SIGNAL> const &signalSemaphores, std::vector<VkSemaphore> const &externalSemaphores,
-                  VkFence fence, uint32_t perf_submit_pass)
-        : cbs(cbs),
-          waitSemaphores(waitSemaphores),
-          signalSemaphores(signalSemaphores),
-          externalSemaphores(externalSemaphores),
-          fence(fence),
-          perf_submit_pass(perf_submit_pass) {}
+    CB_SUBMISSION()
+        : cbs(), waitSemaphores(), signalSemaphores(), externalSemaphores(), fence(VK_NULL_HANDLE), perf_submit_pass(0) {}
 
     std::vector<VkCommandBuffer> cbs;
     std::vector<SEMAPHORE_WAIT> waitSemaphores;
@@ -1205,11 +1435,20 @@ struct MT_FB_ATTACHMENT_INFO {
     VkImage image;
 };
 
+struct SUBPASS_INFO {
+    bool used;
+    VkImageUsageFlagBits usage;
+    VkImageLayout layout;
+
+    SUBPASS_INFO() : used(false), usage(VkImageUsageFlagBits(0)), layout(VK_IMAGE_LAYOUT_UNDEFINED) {}
+};
+
 class FRAMEBUFFER_STATE : public BASE_NODE {
   public:
     VkFramebuffer framebuffer;
     safe_VkFramebufferCreateInfo createInfo;
     std::shared_ptr<const RENDER_PASS_STATE> rp_state;
+    std::vector<std::shared_ptr<IMAGE_VIEW_STATE>> attachments_view_state;
     FRAMEBUFFER_STATE(VkFramebuffer fb, const VkFramebufferCreateInfo *pCreateInfo, std::shared_ptr<RENDER_PASS_STATE> &&rpstate)
         : framebuffer(fb), createInfo(pCreateInfo), rp_state(rpstate){};
 };
@@ -1241,10 +1480,33 @@ struct DeviceFeatures {
     VkPhysicalDevicePerformanceQueryFeaturesKHR performance_query_features;
     VkPhysicalDeviceCoherentMemoryFeaturesAMD device_coherent_memory_features;
     VkPhysicalDeviceYcbcrImageArraysFeaturesEXT ycbcr_image_array_features;
-    VkPhysicalDeviceRayTracingFeaturesKHR ray_tracing_features;
+    VkPhysicalDeviceRayQueryFeaturesKHR ray_query_features;
+    VkPhysicalDeviceRayTracingPipelineFeaturesKHR ray_tracing_pipeline_features;
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR ray_tracing_acceleration_structure_features;
+    VkPhysicalDeviceRobustness2FeaturesEXT robustness2_features;
+    VkPhysicalDeviceFragmentDensityMapFeaturesEXT fragment_density_map_features;
+    VkPhysicalDeviceFragmentDensityMap2FeaturesEXT fragment_density_map2_features;
+    VkPhysicalDeviceASTCDecodeFeaturesEXT astc_decode_features;
+    VkPhysicalDeviceCustomBorderColorFeaturesEXT custom_border_color_features;
+    VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT pipeline_creation_cache_control_features;
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extended_dynamic_state_features;
+    VkPhysicalDeviceMultiviewFeatures multiview_features;
+    VkPhysicalDevicePortabilitySubsetFeaturesKHR portability_subset_features;
+    VkPhysicalDeviceFragmentShadingRateFeaturesKHR fragment_shading_rate_features;
+    VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL shader_integer_functions2_features;
+    VkPhysicalDeviceShaderSMBuiltinsFeaturesNV shader_sm_builtins_feature;
+    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT shader_atomic_float_feature;
+    VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT shader_image_atomic_int64_feature;
+    VkPhysicalDeviceShaderClockFeaturesKHR shader_clock_feature;
+    VkPhysicalDeviceConditionalRenderingFeaturesEXT conditional_rendering;
+    VkPhysicalDeviceWorkgroupMemoryExplicitLayoutFeaturesKHR workgroup_memory_explicit_layout_features;
+    VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2_features;
+    // If a new feature is added here that involves a SPIR-V capability add also in spirv_validation_generator.py
+    // This is known by checking the table in the spec or if the struct is in a <spirvcapability> in vk.xml
 };
 
 enum RenderPassCreateVersion { RENDER_PASS_VERSION_1 = 0, RENDER_PASS_VERSION_2 = 1 };
+enum CopyCommandVersion { COPY_COMMAND_VERSION_1 = 0, COPY_COMMAND_VERSION_2 = 1 };
 enum CommandVersion { CMD_VERSION_1 = 0, CMD_VERSION_2 = 1 };
 
 enum BarrierOperationsType {
