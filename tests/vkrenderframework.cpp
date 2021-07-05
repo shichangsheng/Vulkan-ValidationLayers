@@ -463,13 +463,58 @@ void VkRenderFramework::InitFramework(void * /*unused compatibility parameter*/,
     ASSERT_VK_SUCCESS(vk::CreateInstance(&ici, nullptr, &instance_));
     if (instance_pnext) reinterpret_cast<VkBaseOutStructure *>(last_pnext)->pNext = nullptr;  // reset back borrowed pNext chain
 
-    uint32_t gpu_count = 1;
-    const VkResult err = vk::EnumeratePhysicalDevices(instance_, &gpu_count, &gpu_);
+    // Choose a physical device
+    uint32_t gpu_count = 0;
+    const VkResult err = vk::EnumeratePhysicalDevices(instance_, &gpu_count, nullptr);
     ASSERT_TRUE(err == VK_SUCCESS || err == VK_INCOMPLETE) << vk_result_string(err);
     ASSERT_GT(gpu_count, (uint32_t)0) << "No GPU (i.e. VkPhysicalDevice) available";
 
-    vk::GetPhysicalDeviceProperties(gpu_, &physDevProps_);
+    std::vector<VkPhysicalDevice> phys_devices(gpu_count);
+    vk::EnumeratePhysicalDevices(instance_, &gpu_count, phys_devices.data());
+
+    const int phys_device_index = VkTestFramework::m_phys_device_index;
+    if ((phys_device_index >= 0) && (phys_device_index < static_cast<int>(gpu_count))) {
+        gpu_ = phys_devices[phys_device_index];
+        vk::GetPhysicalDeviceProperties(gpu_, &physDevProps_);
+    } else {
+        // Specify a "physical device priority" with larger values meaning higher priority.
+        std::array<int, VK_PHYSICAL_DEVICE_TYPE_CPU + 1> device_type_rank;
+        device_type_rank[VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU] = 4;
+        device_type_rank[VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU] = 3;
+        device_type_rank[VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU] = 2;
+        device_type_rank[VK_PHYSICAL_DEVICE_TYPE_CPU] = 1;
+        device_type_rank[VK_PHYSICAL_DEVICE_TYPE_OTHER] = 0;
+
+        // Initialize physical device and properties with first device found
+        gpu_ = phys_devices[0];
+        m_gpu_index = 0;
+        vk::GetPhysicalDeviceProperties(gpu_, &physDevProps_);
+
+        // See if there are any higher priority devices found
+        for (size_t i = 1; i < phys_devices.size(); ++i) {
+            VkPhysicalDeviceProperties tmp_props;
+            vk::GetPhysicalDeviceProperties(phys_devices[i], &tmp_props);
+            if (device_type_rank[tmp_props.deviceType] > device_type_rank[physDevProps_.deviceType]) {
+                physDevProps_ = tmp_props;
+                gpu_ = phys_devices[i];
+                m_gpu_index = i;
+            }
+        }
+    }
+
     debug_reporter_.Create(instance_);
+
+    static bool driver_printed = false;
+    if (GetEnvironment("VK_LAYER_TESTS_PRINT_DRIVER") != "" && !driver_printed) {
+        if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+            auto driver_properties = LvlInitStruct<VkPhysicalDeviceDriverProperties>();
+            auto physical_device_properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&driver_properties);
+            vk::GetPhysicalDeviceProperties2(gpu_, &physical_device_properties2);
+            printf("Driver Name = %s\n", driver_properties.driverName);
+            printf("Driver Info = %s\n", driver_properties.driverInfo);
+        }
+        driver_printed = true;
+    }
 }
 
 void VkRenderFramework::ShutdownFramework() {
@@ -516,6 +561,14 @@ void VkRenderFramework::GetPhysicalDeviceFeatures(VkPhysicalDeviceFeatures *feat
 
 bool VkRenderFramework::IsPlatform(PlatformType platform) {
     return (!vk_gpu_table.find(platform)->second.compare(physDevProps().deviceName));
+}
+
+bool VkRenderFramework::IsDriver(VkDriverId driver_id) {
+    // Assumes api version 1.2+
+    auto driver_properties = LvlInitStruct<VkPhysicalDeviceDriverProperties>();
+    auto physical_device_properties2 = LvlInitStruct<VkPhysicalDeviceProperties2>(&driver_properties);
+    vk::GetPhysicalDeviceProperties2(gpu_, &physical_device_properties2);
+    return(driver_properties.driverID == driver_id);
 }
 
 void VkRenderFramework::GetPhysicalDeviceProperties(VkPhysicalDeviceProperties *props) { *props = physDevProps_; }
@@ -907,6 +960,38 @@ void VkRenderFramework::DestroyRenderTarget() {
     m_renderPass = VK_NULL_HANDLE;
     vk::DestroyFramebuffer(device(), m_framebuffer, nullptr);
     m_framebuffer = VK_NULL_HANDLE;
+}
+
+bool VkRenderFramework::InitFrameworkAndRetrieveFeatures(VkPhysicalDeviceFeatures2KHR &features2) {
+    if (InstanceExtensionSupported(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)) {
+        m_instance_extension_names.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+    }
+    else {
+        printf("Instance extension %s not supported, skipping test\n",
+            VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        return false;
+    }
+    InitFramework();
+
+    // Cycle through device extensions and check for support
+    for (auto extension : m_device_extension_names) {
+        if (!DeviceExtensionSupported(extension)) {
+            printf("Device extension %s is not supported\n", extension);
+            return false;
+        }
+    }
+    PFN_vkGetPhysicalDeviceFeatures2KHR vkGetPhysicalDeviceFeatures2KHR =
+        (PFN_vkGetPhysicalDeviceFeatures2KHR)vk::GetInstanceProcAddr(instance(),
+            "vkGetPhysicalDeviceFeatures2KHR");
+
+    if (vkGetPhysicalDeviceFeatures2KHR) {
+        vkGetPhysicalDeviceFeatures2KHR(gpu(), &features2);
+        return true;
+    }
+    else {
+        printf("Cannot use vkGetPhysicalDeviceFeatures to determine available features\n");
+        return false;
+    }
 }
 
 VkDeviceObj::VkDeviceObj(uint32_t id, VkPhysicalDevice obj) : vk_testing::Device(obj), id(id) {
@@ -1700,7 +1785,7 @@ VkConstantBufferObj::VkConstantBufferObj(VkDeviceObj *device, VkDeviceSize alloc
 
 VkPipelineShaderStageCreateInfo const &VkShaderObj::GetStageCreateInfo() const { return m_stage_info; }
 
-VkShaderObj::VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name, VkSpecializationInfo *specInfo)
+VkShaderObj::VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name, const VkSpecializationInfo *specInfo)
     : m_device(device) {
     m_stage_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     m_stage_info.pNext = nullptr;
@@ -1712,7 +1797,7 @@ VkShaderObj::VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char 
 }
 
 VkShaderObj::VkShaderObj(VkDeviceObj *device, const char *shader_code, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                         char const *name, bool debug, VkSpecializationInfo *specInfo, uint32_t spirv_minor_version)
+                         char const *name, bool debug, const VkSpecializationInfo *specInfo, uint32_t spirv_minor_version)
     : VkShaderObj(*device, stage, name, specInfo) {
     InitFromGLSL(*framework, shader_code, debug, spirv_minor_version);
 }
@@ -1750,7 +1835,7 @@ VkResult VkShaderObj::InitFromGLSLTry(VkRenderFramework &framework, const char *
 }
 
 VkShaderObj::VkShaderObj(VkDeviceObj *device, const string spv_source, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                         char const *name, VkSpecializationInfo *specInfo, const spv_target_env env)
+                         char const *name, const VkSpecializationInfo *specInfo, const spv_target_env env)
     : VkShaderObj(*device, stage, name, specInfo) {
     InitFromASM(*framework, spv_source, env);
 }

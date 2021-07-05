@@ -20,6 +20,7 @@
 #include "chassis.h"
 #include "layer_chassis_dispatch.h"
 #include "state_tracker.h"
+#include "descriptor_sets.h"
 #include "shader_validation.h"
 #include "spirv-tools/libspirv.h"
 #include "spirv-tools/optimizer.hpp"
@@ -51,7 +52,7 @@ class UtilDescriptorSetManager {
     };
     VkDevice device;
     uint32_t numBindingsInSet;
-    std::unordered_map<VkDescriptorPool, struct PoolTracker> desc_pool_map_;
+    layer_data::unordered_map<VkDescriptorPool, struct PoolTracker> desc_pool_map_;
 };
 
 // Implementation for Descriptor Set Manager class
@@ -102,9 +103,7 @@ VkResult UtilDescriptorSetManager::GetDescriptorSets(uint32_t count, VkDescripto
             VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             pool_count * numBindingsInSet,
         };
-        VkDescriptorPoolCreateInfo desc_pool_info = {};
-        desc_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        desc_pool_info.pNext = NULL;
+        auto desc_pool_info = LvlInitStruct<VkDescriptorPoolCreateInfo>();
         desc_pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
         desc_pool_info.maxSets = pool_count;
         desc_pool_info.poolSizeCount = 1;
@@ -482,7 +481,7 @@ bool GetLineAndFilename(const std::string string, uint32_t *linenumber, std::str
         // Remove enclosing double quotes.  The regex guarantees the quotes and at least one char.
         filename = captures[3].str().substr(1, captures[3].str().size() - 2);
     }
-    *linenumber = std::stoul(captures[1]);
+    *linenumber = (uint32_t)std::stoul(captures[1]);
     return true;
 }
 #endif  // GCC_VERSION

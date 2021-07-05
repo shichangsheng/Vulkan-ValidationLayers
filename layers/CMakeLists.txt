@@ -135,7 +135,6 @@ endif()
 set(CHASSIS_LIBRARY_FILES
     generated/chassis.cpp
     generated/layer_chassis_dispatch.cpp
-    generated/command_counter_helper.cpp
     generated/vk_safe_struct.cpp
     generated/vk_safe_struct.h
     layer_options.cpp
@@ -156,18 +155,35 @@ set(CORE_VALIDATION_LIBRARY_FILES
     core_validation_error_enums.h
     core_error_location.h
     core_error_location.cpp
-    core_validation_types.h
+    base_node.h
+    device_memory_state.h
+    device_memory_state.cpp
+    buffer_state.h
+    cmd_buffer_state.h
+    cmd_buffer_state.cpp
+    image_state.h
+    image_state.cpp
+    pipeline_state.h
+    pipeline_state.cpp
+    query_state.h
+    ray_tracing_state.h
+    render_pass_state.h
+    render_pass_state.cpp
+    sampler_state.h
     drawdispatch.cpp
     convert_to_renderpass2.cpp
     descriptor_sets.cpp
     descriptor_sets.h
     buffer_validation.cpp
     buffer_validation.h
+    shader_module.cpp
+    shader_module.h
     shader_validation.cpp
     shader_validation.h
     sync_vuid_maps.cpp
     sync_vuid_maps.h
     generated/spirv_validation_helper.cpp
+    generated/command_validation.cpp
     generated/synchronization_validation_types.cpp
     gpu_validation.cpp
     generated/corechecks_optick_instrumentation.cpp
@@ -260,6 +276,10 @@ if(BUILD_LAYERS)
     # Note that CMake reduces inlining optimization levels for RelWithDebInfo builds.
     if(MSVC)
         target_compile_options(VkLayer_khronos_validation PRIVATE "$<$<CONFIG:Release>:/Zi>")
+        if (USE_ROBIN_HOOD_HASHING)
+            # This warning produces what look like false positives in robin_hood.h with Visual Studio 2015
+            target_compile_options(VkLayer_khronos_validation PRIVATE "$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,19.1>>:/wd4996>")
+        endif()
         # Need to use this instead of target_link_options() for older versions of CMake.
         target_link_libraries(VkLayer_khronos_validation PRIVATE "$<$<CONFIG:Release>:-DEBUG:FULL>")
     endif()
@@ -270,6 +290,9 @@ if(BUILD_LAYERS)
     target_include_directories(VkLayer_khronos_validation PRIVATE ${SPIRV_HEADERS_INCLUDE_DIR})
     if(INSTRUMENT_OPTICK)
         target_include_directories(VkLayer_khronos_validation PRIVATE ${OPTICK_SOURCE_DIR})
+    endif()
+    if (USE_ROBIN_HOOD_HASHING)
+        target_include_directories(VkLayer_khronos_validation PRIVATE ${ROBIN_HOOD_HASHING_INCLUDE_DIR})
     endif()
     target_link_libraries(VkLayer_khronos_validation PRIVATE ${SPIRV_TOOLS_LIBRARIES})
 
@@ -284,7 +307,7 @@ if(BUILD_LAYERS)
     # Run each .json.in file through the generator We need to create the generator.cmake script so that the generator can be run at
     # compile time, instead of configure time Running at compile time lets us use cmake generator expressions (TARGET_FILE_NAME and
     # TARGET_FILE_DIR, specifically)
-    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generator.cmake" "configure_file(\"\${INPUT_FILE}\" \"\${OUTPUT_FILE}\")")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generator.cmake" "configure_file(\"\${INPUT_FILE}\" \"\${OUTPUT_FILE}\" @ONLY)")
     foreach(TARGET_NAME ${TARGET_NAMES})
         set(CONFIG_DEFINES -DINPUT_FILE="${CMAKE_CURRENT_SOURCE_DIR}/json/${TARGET_NAME}.json.in" -DVK_VERSION=1.2.${vk_header_version})
         # If this json file is not a metalayer, get the needed properties from that target

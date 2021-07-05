@@ -15,6 +15,7 @@
 
 #include "cast_utils.h"
 #include "layer_validation_tests.h"
+#include "best_practices_error_enums.h"
 
 void VkBestPracticesLayerTest::InitBestPracticesFramework() {
     // Enable all vendor-specific checks
@@ -247,6 +248,7 @@ TEST_F(VkBestPracticesLayerTest, CmdClearAttachmentTest) {
 
     // Call for full-sized FB Color attachment prior to issuing a Draw
     m_errorMonitor->SetDesiredFailureMsg(kPerformanceWarningBit, "UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw");
+
     vk::CmdClearAttachments(m_commandBuffer->handle(), 1, &color_attachment, 1, &clear_rect);
     m_errorMonitor->VerifyFound();
 }
@@ -645,6 +647,9 @@ TEST_F(VkBestPracticesLayerTest, ClearAttachmentsAfterLoad) {
     // On tiled renderers, this can also trigger a warning about LOAD_OP_LOAD causing a readback
     m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-vkCmdBeginRenderPass-attachment-needs-readback");
     m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-DrawState-ClearCmdBeforeDraw");
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-RenderPass-redundant-store");
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-RenderPass-redundant-clear");
+    m_errorMonitor->SetAllowedFailureMsg("UNASSIGNED-BestPractices-RenderPass-inefficient-clear");
 
     m_commandBuffer->begin();
     m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
@@ -717,6 +722,81 @@ TEST_F(VkBestPracticesLayerTest, TripleBufferingTest) {
     DestroySwapchain();
 }
 
+TEST_F(VkBestPracticesLayerTest, SwapchainCreationTest) {
+    TEST_DESCRIPTION("Test for correct swapchain creation");
+
+    AddSurfaceInstanceExtension();
+    InitBestPracticesFramework();
+    AddSwapchainDeviceExtension();
+    InitState();
+    if (!InitSurface()) {
+        printf("%s Cannot create surface, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    // GetPhysicalDeviceSurfaceCapabilitiesKHR() not called before trying to create a swapchain
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-surface-not-retrieved");
+
+    // GetPhysicalDeviceSurfaceFormatsKHR() not called before trying to create a swapchain
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-surface-not-retrieved");
+
+    // GetPhysicalDeviceSurfacePresentModesKHR() not called before trying to create a swapchain
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, "UNASSIGNED-BestPractices-vkCreateSwapchainKHR-surface-not-retrieved");
+
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+    m_surface_composite_alpha = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+#else
+    m_surface_composite_alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+#endif
+
+    VkImageUsageFlags imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkSurfaceTransformFlagBitsKHR preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+    VkSwapchainCreateInfoKHR swapchain_create_info = {};
+    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    swapchain_create_info.pNext = 0;
+    swapchain_create_info.surface = m_surface;
+    swapchain_create_info.minImageCount = 3;
+    swapchain_create_info.imageArrayLayers = 1;
+    swapchain_create_info.imageUsage = imageUsage;
+    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    swapchain_create_info.preTransform = preTransform;
+    swapchain_create_info.compositeAlpha = m_surface_composite_alpha;
+    swapchain_create_info.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+    swapchain_create_info.clipped = VK_FALSE;
+    swapchain_create_info.oldSwapchain = 0;
+
+    // Set unexpected error because warning is thrown any time the present mode is not VK_PRESENT_MODE_FIFO_KHR
+    m_errorMonitor->SetUnexpectedError("UNASSIGNED-BestPractices-vkCreateSwapchainKHR-swapchain-presentmode-not-fifo");
+
+    VkResult err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+    ASSERT_TRUE(err == VK_ERROR_VALIDATION_FAILED_EXT);
+    m_errorMonitor->VerifyFound();
+
+    // Test for successful swapchain creation when GetPhysicalDeviceSurfaceCapabilitiesKHR() and
+    // GetPhysicalDeviceSurfaceFormatsKHR() are queried as expected and GetPhysicalDeviceSurfacePresentModesKHR() is not called but
+    // the present mode is VK_PRESENT_MODE_FIFO_KHR
+    vk::GetPhysicalDeviceSurfaceCapabilitiesKHR(gpu(), m_surface, &m_surface_capabilities);
+
+    uint32_t format_count;
+    vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), m_surface, &format_count, nullptr);
+    if (format_count != 0) {
+        m_surface_formats.resize(format_count);
+        vk::GetPhysicalDeviceSurfaceFormatsKHR(gpu(), m_surface, &format_count, m_surface_formats.data());
+    }
+
+    swapchain_create_info.imageFormat = m_surface_formats[0].format;
+    swapchain_create_info.imageColorSpace = m_surface_formats[0].colorSpace;
+    swapchain_create_info.imageExtent = {m_surface_capabilities.minImageExtent.width, m_surface_capabilities.minImageExtent.height};
+    swapchain_create_info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    m_errorMonitor->ExpectSuccess(kWarningBit);
+    err = vk::CreateSwapchainKHR(device(), &swapchain_create_info, nullptr, &m_swapchain);
+    m_errorMonitor->VerifyNotFound();
+
+    DestroySwapchain();
+}
+
 TEST_F(VkBestPracticesLayerTest, ExpectedQueryDetails) {
     TEST_DESCRIPTION("Check that GetPhysicalDeviceQueueFamilyProperties is working as expected");
 
@@ -775,7 +855,6 @@ TEST_F(VkBestPracticesLayerTest, MissingQueryDetails) {
 
     // Now get information correctly
     m_errorMonitor->ExpectSuccess(kErrorBit | kWarningBit);
-
     vk_testing::QueueCreateInfoArray queue_info(phys_device_obj.queue_properties());
     // Only request creation with queuefamilies that have at least one queue
     std::vector<VkDeviceQueueCreateInfo> create_queue_infos;
@@ -805,4 +884,60 @@ TEST_F(VkBestPracticesLayerTest, MissingQueryDetails) {
     VkDevice device;
     vk::CreateDevice(phys_device_obj.handle(), &device_ci, nullptr, &device);
     m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, GetSwapchainImagesInvalidCount) {
+    TEST_DESCRIPTION("Pass an 'incorrect' count to the second GetSwapchainImagesKHR call");
+
+    if (!AddSurfaceInstanceExtension()) {
+        printf("%s surface extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    ASSERT_NO_FATAL_FAILURE(InitBestPracticesFramework());
+
+    if (!AddSwapchainDeviceExtension()) {
+        printf("%s swapchain extensions not supported, skipping test\n", kSkipPrefix);
+        return;
+    }
+    ASSERT_NO_FATAL_FAILURE(InitState());
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+    if (!InitSwapchain()) {
+        printf("%s Cannot create surface or swapchain, skipping test\n", kSkipPrefix);
+        return;
+    }
+
+    uint32_t swapchain_images_count = 0;
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, nullptr);
+
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, kVUID_BestPractices_Swapchain_InvalidCount);
+    ++swapchain_images_count;  // Set the image count to something greater (i.e., "invalid") than what was returned
+    std::vector<VkImage> swapchain_images(swapchain_images_count, VK_NULL_HANDLE);
+    vk::GetSwapchainImagesKHR(device(), m_swapchain, &swapchain_images_count, swapchain_images.data());
+    m_errorMonitor->VerifyFound();
+}
+
+TEST_F(VkBestPracticesLayerTest, DepthBiasNoAttachment) {
+    TEST_DESCRIPTION("Enable depthBias without a depth attachment");
+
+    InitBestPracticesFramework();
+    InitState();
+    ASSERT_NO_FATAL_FAILURE(InitRenderTarget());
+
+    CreatePipelineHelper pipe(*this);
+    pipe.InitInfo();
+    pipe.rs_state_ci_.depthBiasEnable = VK_TRUE;
+    pipe.rs_state_ci_.depthBiasConstantFactor = 1.0f;
+    pipe.InitState();
+    pipe.CreateGraphicsPipeline();
+
+    m_commandBuffer->begin();
+    m_commandBuffer->BeginRenderPass(m_renderPassBeginInfo);
+    vk::CmdBindPipeline(m_commandBuffer->handle(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipe.pipeline_);
+
+    m_errorMonitor->SetDesiredFailureMsg(kWarningBit, kVUID_BestPractices_DepthBiasNoAttachment);
+    vk::CmdDraw(m_commandBuffer->handle(), 3, 1, 0, 0);
+    m_errorMonitor->VerifyFound();
+
+    m_commandBuffer->end();
 }

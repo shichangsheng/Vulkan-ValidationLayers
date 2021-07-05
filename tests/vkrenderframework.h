@@ -40,9 +40,9 @@ class VkImageObj;
 
 #include <algorithm>
 #include <array>
-#include <map>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 #include <unordered_set>
 
 using vk_testing::MakeVkHandles;
@@ -259,7 +259,9 @@ class VkRenderFramework : public VkTestFramework {
     void InitRenderTarget(VkImageView *dsBinding);
     void InitRenderTarget(uint32_t targets, VkImageView *dsBinding);
     void DestroyRenderTarget();
+    bool InitFrameworkAndRetrieveFeatures(VkPhysicalDeviceFeatures2KHR &features2);
 
+    bool IsDriver(VkDriverId driver_id);
     bool IsPlatform(PlatformType platform);
     void GetPhysicalDeviceFeatures(VkPhysicalDeviceFeatures *features);
     void GetPhysicalDeviceProperties(VkPhysicalDeviceProperties *props);
@@ -290,9 +292,10 @@ class VkRenderFramework : public VkTestFramework {
     std::vector<const char *> instance_extensions_;
     std::vector<const char *> &m_instance_extension_names = instance_extensions_;  // compatibility alias name
     VkInstance instance_;
-    VkPhysicalDevice gpu_;
+    VkPhysicalDevice gpu_ = VK_NULL_HANDLE;
     VkPhysicalDeviceProperties physDevProps_;
 
+    uint32_t m_gpu_index;
     VkDeviceObj *m_device;
     VkCommandPoolObj *m_commandPool;
     VkCommandBufferObj *m_commandBuffer;
@@ -598,12 +601,13 @@ class VkDescriptorSetObj : public vk_testing::DescriptorPool {
 class VkShaderObj : public vk_testing::ShaderModule {
   public:
     VkShaderObj(VkDeviceObj &device, VkShaderStageFlagBits stage, char const *name = "main",
-                VkSpecializationInfo *specInfo = nullptr);
+                const VkSpecializationInfo *specInfo = nullptr);
     VkShaderObj(VkDeviceObj *device, const char *shaderText, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                char const *name = "main", bool debug = false, VkSpecializationInfo *specInfo = nullptr,
+                char const *name = "main", bool debug = false, const VkSpecializationInfo *specInfo = nullptr,
                 uint32_t spirv_minor_version = 0);
     VkShaderObj(VkDeviceObj *device, const std::string spv_source, VkShaderStageFlagBits stage, VkRenderFramework *framework,
-                char const *name = "main", VkSpecializationInfo *specInfo = nullptr, const spv_target_env env = SPV_ENV_VULKAN_1_0);
+                char const *name = "main", const VkSpecializationInfo *specInfo = nullptr,
+                const spv_target_env env = SPV_ENV_VULKAN_1_0);
     VkPipelineShaderStageCreateInfo const &GetStageCreateInfo() const;
 
     bool InitFromGLSL(VkRenderFramework &framework, const char *shader_code, bool debug = false, uint32_t spirv_minor_version = 0);

@@ -1,10 +1,9 @@
 # Build Instructions
 
-Instructions for building this repository on Linux, Windows, Android, and
-MacOS.
-
 ## Index
 
+1. [Requirements](#requirements)
+1. [Building](#building)
 1. [Contributing](#contributing-to-the-repository)
 1. [Repository Content](#repository-content)
 1. [Repository Set-Up](#repository-set-up)
@@ -12,6 +11,43 @@ MacOS.
 1. [Linux Build](#building-on-linux)
 1. [Android Build](#building-on-android)
 1. [MacOS build](#building-on-macos)
+
+## Requirements
+
+1. Python >= 3.7 (3.6 may work, 3.5 and earlier is not supported)
+1. CMake >= 3.10.2
+1. C++ >= c++11 compiler. See platform-specific sections below for supported compiler versions.
+
+## Building
+
+**NOTE**: See [this](#google-test) first if you are also building the tests.
+
+```bash
+# One-time generation
+mkdir build # Arbitrary build directory
+cd build
+
+# Run './scripts/update_deps.py --help' for more information
+# NOTE: You can alternatively set -DUPDATE_DEPS=ON during cmake generation
+#       to have a cmake target automatically run this as needed.
+python3 ../scripts/update_deps.py --dir ../external --arch x64 --config debug
+
+# NOTE: If using -DUPDATE_DEPS=ON, CMAKE_BUILD_TYPE is used to determine the build type
+#       of external dependencies. For generators such as Visual Studio that usually ignore
+#       CMAKE_BUILD_TYPE, it's a good idea to still set CMAKE_BUILD_TYPE in this case to control
+#       the build type of dependencies. If you want a "mix" (e.g., Release dependencies, Debug VVL),
+#       you will want to use `update_deps.py` manually.
+cmake -C ../external/helper.cmake -DCMAKE_BUILD_TYPE=Debug ..
+
+# Building
+cmake --build . --config Debug
+```
+
+Note the `-C ../external/helper.cmake` argument passed to cmake. This is necessary when
+calling the `update_deps.py` script manually. See below for more details.
+
+These are general instructions that should "just work" on Windows and Linux. For platform-specific
+build instructions, see the appropriate `<Platform> Build` section below.
 
 ## Contributing to the Repository
 
@@ -105,6 +141,13 @@ file. You must also take note of the SPIRV-headers install directory
 and pass it on the CMake command line for building this repository, as
 described below.
 
+#### Robin Hood hashing
+This repository has a required dependency on the
+[robin-hood-hashing repository](https://github.com/martinus/robin-hood-hashing).
+This is a header-only reimplementation of `std::unordered_map` and `std::unordered_set`
+which provides substantial performance improvements on all platforms.
+Since there is nothing to build, the install directory for this repository is the
+directory where the the repository is cloned.
 
 #### Google Test
 
@@ -302,6 +345,7 @@ work with the solution interactively.
                  -DGLSLANG_INSTALL_DIR=absolute_path_to_install_dir \
                  -DSPIRV_HEADERS_INSTALL_DIR=absolute_path_to_install_dir \
                  -DSPIRV_TOOLS_INSTALL_DIR=absolute_path_to_install_dir \
+                 -DROBIN_HOOD_HASHING_INSTALL_DIR=absolute_path_to_install_dir \
                  ..
     cmake --build .
 
@@ -324,6 +368,7 @@ create a build directory and generate the Visual Studio project files:
                  -DGLSLANG_INSTALL_DIR=absolute_path_to_install_dir \
                  -DSPIRV_HEADERS_INSTALL_DIR=absolute_path_to_install_dir \
                  -DSPIRV_TOOLS_INSTALL_DIR=absolute_path_to_install_dir
+                 -DROBIN_HOOD_HASHING_INSTALL_DIR=absolute_path_to_install_dir \
                  ..
 
 > Note: The `..` parameter tells `cmake` the location of the top of the
@@ -407,6 +452,7 @@ location of the loader's install directory:
                  -DVULKAN_LOADER_INSTALL_DIR=absolute_path_to_install_dir \
                  -DGLSLANG_INSTALL_DIR=absolute_path_to_install_dir \
                  -DSPIRV_TOOLS_INSTALL_DIR=absolute_path_to_install_dir \
+                 -DROBIN_HOOD_HASHING_INSTALL_DIR=absolute_path_to_install_dir \
                  ..
 
 ### Windows Tests and Demos
@@ -484,6 +530,7 @@ CMake with the `--build` option or `make` to build from the command line.
           -DGLSLANG_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_HEADERS_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_TOOLS_INSTALL_DIR=absolute_path_to_install_dir \
+          -DROBIN_HOOD_HASHING_INSTALL_DIR=absolute_path_to_install_dir \
           ..
     make
 
@@ -502,6 +549,7 @@ create a build directory and generate the make files.
           -DGLSLANG_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_HEADERS_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_TOOLS_INSTALL_DIR=absolute_path_to_install_dir \
+          -DROBIN_HOOD_HASHING_INSTALL_DIR=absolute_path_to_install_dir \
           -DCMAKE_INSTALL_PREFIX=install ..
 
 > Note: The `..` parameter tells `cmake` the location of the top of the
@@ -691,7 +739,7 @@ On OSX:
 
     export ANDROID_SDK_HOME=$HOME/Library/Android/sdk
     export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk-bundle
-    export PATH=$ANDROID_NDK_PATH:$PATH
+    export PATH=$ANDROID_NDK_HOME:$PATH
     export PATH=$ANDROID_SDK_HOME/build-tools/26.0.3:$PATH
 
 Note: If `jarsigner` is missing from your platform, you can find it in the
@@ -835,6 +883,7 @@ build is:
           -DGLSLANG_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_HEADERS_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_TOOLS_INSTALL_DIR=absolute_path_to_install_dir \
+          -DROBIN_HOOD_HASHING_INSTALL_DIR=absolute_path_to_install_dir \
           -DCMAKE_BUILD_TYPE=Debug ..
     make
 
@@ -853,6 +902,7 @@ To create and open an Xcode project:
           -DGLSLANG_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_HEADERS_INSTALL_DIR=absolute_path_to_install_dir \
           -DSPIRV_TOOLS_INSTALL_DIR=absolute_path_to_install_dir \
+          -DROBIN_HOOD_HASHING_INSTALL_DIR=absolute_path_to_install_dir \
           -GXcode ..
     open VULKAN.xcodeproj
 
